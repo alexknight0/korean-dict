@@ -48,7 +48,7 @@ def main():
         page.goto(base)
         page.wait_for_function("document.body.classList.contains('idle')")
         assert page.locator("#results").inner_text().strip() == ""  # no filler text when empty
-        assert page.locator("#credit").is_visible() and not page.locator("#credit p").is_visible()
+        assert not page.locator("#credit").is_visible()  # attribution only on entry pages
         page.screenshot(path="/tmp/korean-dict-home.png")
         box = page.locator("header").bounding_box()
         assert abs(box["y"] + box["height"] - 844) < 2, box  # phone: search bar at bottom
@@ -63,11 +63,9 @@ def main():
         gloss = page.locator("#results li .gloss").first.inner_text()
         assert "eat" in gloss, gloss
         ys = [b["y"] for b in (l.bounding_box() for l in page.locator("#results ul.results li").all()[:3])]
-        assert ys[0] > ys[1] > ys[2], ys  # phone: best match at the bottom
-        bar = page.locator("header").bounding_box()["y"]
-        first = page.locator("#results ul.results li").first.bounding_box()
-        assert 0 <= bar - (first["y"] + first["height"]) < 60, (bar, first)  # right above the bar
-        print("2/7 exact search ok (reversed on phone):", r[:5], gloss)
+        assert ys[0] < ys[1] < ys[2], ys  # top-down
+        assert page.locator("header").bounding_box()["y"] < 5  # bar moved to the top while searching
+        print("2/7 exact search ok (bar at top while searching):", r[:5], gloss)
 
         type_query(page, "먹었는데")
         page.wait_for_selector("ul.bases .hw")
@@ -101,6 +99,9 @@ def main():
         assert page.locator(".source.kr .en").count() > 0
         assert page.locator(".source.od details.word").count() > 0
         assert page.locator(".source.od ul.ex b").count() > 0
+        assert page.locator("#credit").is_visible() and not page.locator("#credit p").is_visible()
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 844) < 2, box  # entry page: bar back at the bottom
         print("6/7 entry ok:", page.locator(".source.kr .en").first.inner_text()[:60])
 
         link = page.locator(".source.od dl.rel a").first

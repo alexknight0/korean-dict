@@ -144,14 +144,10 @@ function resultItem(key, display, gloss, level, note) {
 
 const phone = window.matchMedia("(max-width: 640px)");
 
-/**
- * Render the result list. On phones the CSS reverses it (best match nearest the
- * bottom search bar), so start scrolled to the bottom.
- */
 function showList(...nodes) {
   document.body.classList.remove("idle");
+  $("#credit").hidden = true; // attribution only on entry pages
   resultsEl.replaceChildren(...nodes);
-  if (phone.matches) window.scrollTo(0, document.documentElement.scrollHeight);
 }
 
 function showHome() {
@@ -434,6 +430,8 @@ function odSection(words, key, hasKr) {
 
 async function showEntry(key) {
   document.body.classList.remove("idle");
+  $("#credit").hidden = false;
+  $("#credit").open = false;
   ++searchToken; // cancel any pending search render
   resultsEl.hidden = true;
   entryEl.hidden = false;
@@ -518,23 +516,15 @@ $("#home").addEventListener("click", () => {
   setTimeout(() => input.focus(), 0);
 });
 
-// Keep the bottom search bar (phones) above the on-screen keyboard. iOS doesn't
-// shrink the layout viewport for the keyboard, so measure the gap ourselves.
-if (window.visualViewport) {
-  const vv = window.visualViewport;
-  const root = document.documentElement;
-  const onViewport = () => {
-    const typing = document.activeElement === input;
-    const kb = typing ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
-    root.style.setProperty("--kb", kb + "px");
-    root.classList.toggle("kb-open", kb > 80);
-  };
-  vv.addEventListener("resize", onViewport);
-  vv.addEventListener("scroll", onViewport);
-  input.addEventListener("focus", () => setTimeout(onViewport, 50));
-  input.addEventListener("blur", () => setTimeout(onViewport, 50));
-  onViewport();
+// Phones: the search bar sits at the bottom until you search; while the box is
+// focused or results are showing it moves to the top (CSS body.searching).
+function updateBar() {
+  const searching = document.activeElement === input || location.hash.startsWith("#q=");
+  document.body.classList.toggle("searching", searching);
 }
+input.addEventListener("focus", updateBar);
+input.addEventListener("blur", () => setTimeout(updateBar, 0));
+window.addEventListener("hashchange", updateBar);
 
 // Link clicks fire hashchange (and usually popstate); back/forward may fire
 // either. Route once per distinct URL.
@@ -549,6 +539,9 @@ window.addEventListener("popstate", routeOnce);
 
 Dict.init().catch(() => {});
 routeOnce();
-if (document.body.classList.contains("idle")) input.focus({ preventScroll: true });
+updateBar();
+// Empty home: put the cursor in the search box. Not on phones — focusing there
+// would move the bar to the top and may pop the keyboard unasked.
+if (document.body.classList.contains("idle") && !phone.matches) input.focus({ preventScroll: true });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

@@ -1,31 +1,18 @@
 :root {
-  --bg: #fbfaf7;
-  --fg: #1d1d1b;
-  --muted: #6b6a66;
-  --line: #e4e1da;
-  --accent: #1f6f5c;
-  --accent-bg: #e3f1ec;
-  --tag-bg: #efede8;
-  --mark: #1f6f5c;
-  --l1: #2e7d32;
-  --l2: #b26a00;
-  --l3: #b3261e;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161716;
-    --fg: #e8e6e1;
-    --muted: #9a9892;
-    --line: #2e2f2d;
-    --accent: #6fcfb2;
-    --accent-bg: #1d332c;
-    --tag-bg: #262725;
-    --mark: #8fe0c6;
-    --l1: #81c784;
-    --l2: #ffb74d;
-    --l3: #ef9a9a;
-  }
+  /* Always dark: on Android the installed app's system bars follow the app's
+     (dark) theme colour, so nothing shows up as a white strip. */
+  --bg: #161716;
+  --fg: #e8e6e1;
+  --muted: #9a9892;
+  --line: #2e2f2d;
+  --accent: #6fcfb2;
+  --accent-bg: #1d332c;
+  --tag-bg: #262725;
+  --mark: #8fe0c6;
+  --l1: #81c784;
+  --l2: #ffb74d;
+  --l3: #ef9a9a;
+  color-scheme: dark;
 }
 
 [hidden] {
@@ -68,61 +55,25 @@ header {
   border-bottom: 1px solid var(--line);
   padding: max(10px, env(safe-area-inset-top)) 14px 10px;
 }
-/* Phones: search bar pinned to the bottom (thumb reach). --kb is the on-screen
-   keyboard height, set from visualViewport in app.js, so the bar sits on top of
-   the keyboard on iOS; Android uses interactive-widget=resizes-content instead. */
+/* Phones: the search bar rests at the bottom (thumb reach) and jumps to the top
+   while searching (body.searching: focused, or showing #q= results), so the
+   keyboard never covers it and results read top-down. */
 @media (max-width: 640px) {
-  header {
+  body:not(.searching) header {
     position: fixed;
     top: auto;
     left: 0;
     right: 0;
-    bottom: var(--kb, 0px);
+    bottom: 0;
     border-bottom: 0;
     border-top: 1px solid var(--line);
     padding: 8px 12px max(8px, env(safe-area-inset-bottom));
   }
-  .kb-open header {
-    padding-bottom: 8px;
-  }
-  /* paint the bar colour below it too, so no gap or nav-bar area shows white */
-  header::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 100%;
-    height: 200px;
-    background: var(--bg);
-  }
-  body {
+  body:not(.searching) {
     padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
-  /* main fills the space above the bar so result lists can sit at its bottom */
   main {
     padding-top: max(6px, env(safe-area-inset-top));
-    padding-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-    min-height: calc(100dvh - 64px - env(safe-area-inset-bottom) - var(--kb, 0px));
-  }
-  /* Result lists run bottom-up: best match sits right above the search bar. */
-  #results:not([hidden]) {
-    flex: 1;
-    display: flex;
-    flex-direction: column-reverse;
-    justify-content: flex-start;
-  }
-  #results ul.results {
-    display: flex;
-    flex-direction: column-reverse;
-  }
-  #results ul.results li a {
-    border-bottom: 0;
-    border-top: 1px solid var(--line);
-  }
-  #results h2 {
-    margin: 6px 0;
   }
 }
 
