@@ -36,6 +36,7 @@
 }
 html {
   -webkit-text-size-adjust: 100%;
+  background: var(--bg);
 }
 body {
   margin: 0;
@@ -84,12 +85,58 @@ header {
   .kb-open header {
     padding-bottom: 8px;
   }
+  /* paint the bar colour below it too, so no gap or nav-bar area shows white */
+  header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 200px;
+    background: var(--bg);
+  }
   body {
     padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
   main {
     padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: 8px;
+    min-height: 0;
   }
+  /* Result lists run bottom-up: best match sits right above the search bar. */
+  #results:not([hidden]) {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-start;
+    min-height: calc(100dvh - 80px - env(safe-area-inset-bottom) - var(--kb, 0px));
+  }
+  #results ul.results {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  #results ul.results li a {
+    border-bottom: 0;
+    border-top: 1px solid var(--line);
+  }
+  #results h2 {
+    margin: 6px 0;
+  }
+}
+
+/* Empty home: dim everything but the search bar. */
+body.idle main {
+  opacity: 0.35;
+  transition: opacity 0.2s;
+}
+body.idle #q {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.credit {
+  margin: 32px 0 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 #search-form {
   display: flex;
@@ -124,15 +171,6 @@ main {
   max-width: 760px;
   margin: 0 auto;
   padding: 8px 14px 40px;
-  min-height: 70vh;
-}
-footer {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 16px 14px max(24px, env(safe-area-inset-bottom));
-  color: var(--muted);
-  font-size: 0.8rem;
-  border-top: 1px solid var(--line);
 }
 
 h1 {
@@ -410,4 +448,12 @@ a.src {
 }
 .source > h2 {
   justify-content: flex-start;
+}
+body.idle::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0.18);
+  pointer-events: none;
 }

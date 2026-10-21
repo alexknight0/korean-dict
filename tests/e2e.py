@@ -47,6 +47,8 @@ def main():
         page.on("console", lambda m: m.type == "error" and errors.append(m.text))
         page.goto(base)
         expect(page.locator(".hint")).to_be_visible()
+        assert page.evaluate("document.body.classList.contains('idle')")
+        page.screenshot(path="/tmp/korean-dict-home.png")
         box = page.locator("header").bounding_box()
         assert abs(box["y"] + box["height"] - 844) < 2, box  # phone: search bar at bottom
         page.set_viewport_size({"width": 1000, "height": 800})
@@ -59,7 +61,12 @@ def main():
         assert r and r[0] == "먹다", r
         gloss = page.locator("#results li .gloss").first.inner_text()
         assert "eat" in gloss, gloss
-        print("2/7 exact search ok:", r[:5], gloss)
+        ys = [b["y"] for b in (l.bounding_box() for l in page.locator("#results ul.results li").all()[:3])]
+        assert ys[0] > ys[1] > ys[2], ys  # phone: best match at the bottom
+        bar = page.locator("header").bounding_box()["y"]
+        first = page.locator("#results ul.results li").first.bounding_box()
+        assert 0 <= bar - (first["y"] + first["height"]) < 60, (bar, first)  # right above the bar
+        print("2/7 exact search ok (reversed on phone):", r[:5], gloss)
 
         type_query(page, "먹었는데")
         page.wait_for_selector("ul.bases .hw")

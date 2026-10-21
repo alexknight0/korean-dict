@@ -142,21 +142,33 @@ function resultItem(key, display, gloss, level, note) {
   );
 }
 
+const phone = window.matchMedia("(max-width: 640px)");
+
+/**
+ * Render the result list. On phones the CSS reverses it (best match nearest the
+ * bottom search bar), so start scrolled to the bottom.
+ */
+function showList(...nodes) {
+  document.body.classList.remove("idle");
+  resultsEl.replaceChildren(...nodes);
+  if (phone.matches) window.scrollTo(0, document.documentElement.scrollHeight);
+}
+
 function showHome() {
   entryEl.hidden = true;
   resultsEl.hidden = false;
   setStatus("");
   const list = recent();
-  resultsEl.replaceChildren(
-    list.length
-      ? el(
-          "div",
-          null,
-          el("h2", null, "Recent", el("button", { class: "link", type: "button", onclick: clearRecent }, "Clear")),
-          el("ul", { class: "results" }, list.map(([k, d, g]) => resultItem(k, d, g)))
-        )
-      : el("p", { class: "hint" }, "Search in Korean or English. Conjugated forms work too: 먹었는데 finds 먹다.")
-  );
+  if (list.length) {
+    showList(
+      el("h2", null, "Recent", el("button", { class: "link", type: "button", onclick: clearRecent }, "Clear")),
+      el("ul", { class: "results" }, list.map(([k, d, g]) => resultItem(k, d, g)))
+    );
+  } else {
+    // Nothing to show: dim the page so attention goes to the search bar.
+    showList(el("p", { class: "hint" }, "Search in Korean or English. Conjugated forms work too: 먹었는데 finds 먹다."));
+    document.body.classList.add("idle");
+  }
 }
 
 function clearRecent() {
@@ -179,7 +191,7 @@ async function search(q) {
     if (isLatin) {
       const rows = await Dict.english(query);
       if (token !== searchToken) return;
-      resultsEl.replaceChildren(
+      showList(
         rows.length
           ? el("ul", { class: "results" }, rows.map((r) => resultItem(r.key, r.disp, r.en)))
           : el("p", { class: "hint" }, "No results.")
@@ -217,9 +229,9 @@ async function search(q) {
     if (!parts.length) {
       parts.push(el("p", { class: "hint" }, "No results."));
     }
-    resultsEl.replaceChildren(...parts);
+    showList(...parts);
   } catch (err) {
-    if (token === searchToken) resultsEl.replaceChildren(el("p", { class: "error" }, "Failed to load: " + err.message));
+    if (token === searchToken) showList(el("p", { class: "error" }, "Failed to load: " + err.message));
   }
 }
 
@@ -421,6 +433,7 @@ function odSection(words, key, hasKr) {
 }
 
 async function showEntry(key) {
+  document.body.classList.remove("idle");
   ++searchToken; // cancel any pending search render
   resultsEl.hidden = true;
   entryEl.hidden = false;
@@ -443,7 +456,18 @@ async function showEntry(key) {
     entryEl.replaceChildren(
       el("h1", null, display),
       kr.length ? krSection(kr) : null,
-      od.length ? odSection(od, key, kr.length > 0) : null
+      od.length ? odSection(od, key, kr.length > 0) : null,
+      el(
+        "p",
+        { class: "credit" },
+        "Source: National Institute of Korean Language, ",
+        el("a", { href: "https://krdict.korean.go.kr/", rel: "noopener" }, KR_NAME),
+        " and ",
+        el("a", { href: "https://opendict.korean.go.kr/", rel: "noopener" }, OD_NAME),
+        ", ",
+        el("a", { href: "https://creativecommons.org/licenses/by-sa/2.0/kr/", rel: "noopener" }, "CC BY-SA 2.0 KR"),
+        ". Quoted publication examples and media excluded."
+      )
     );
     window.scrollTo(0, 0);
     const r = await Dict.row(key).catch(() => null);
@@ -511,12 +535,15 @@ if (window.visualViewport) {
   const vv = window.visualViewport;
   const root = document.documentElement;
   const onViewport = () => {
-    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    const typing = document.activeElement === input;
+    const kb = typing ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
     root.style.setProperty("--kb", kb + "px");
     root.classList.toggle("kb-open", kb > 80);
   };
   vv.addEventListener("resize", onViewport);
   vv.addEventListener("scroll", onViewport);
+  input.addEventListener("focus", () => setTimeout(onViewport, 50));
+  input.addEventListener("blur", () => setTimeout(onViewport, 50));
   onViewport();
 }
 
@@ -531,11 +558,8 @@ function routeOnce() {
 window.addEventListener("hashchange", routeOnce);
 window.addEventListener("popstate", routeOnce);
 
-Dict.init()
-  .then((meta) => {
-    $("#built").textContent = `(${meta.keys.toLocaleString()} headwords, built ${meta.built})`;
-  })
-  .catch(() => {});
+Dict.init().catch(() => {});
 routeOnce();
+if (document.body.classList.contains("idle")) input.focus({ preventScroll: true });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
