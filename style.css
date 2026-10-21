@@ -12,6 +12,7 @@
   --l1: #81c784;
   --l2: #ffb74d;
   --l3: #ef9a9a;
+  --bar: #1f6f5c; /* search bar (matches the app icon) */
   color-scheme: dark;
 }
 
@@ -51,8 +52,9 @@ header {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
+  /* the whole search bar is brand green so it stands out */
+  background: var(--bar);
+  border-bottom: 1px solid var(--bar);
   padding: max(10px, env(safe-area-inset-top)) 14px 10px;
 }
 /* Phones: the search bar rests at the bottom (thumb reach) and jumps to the top
@@ -66,7 +68,7 @@ header {
     right: 0;
     bottom: 0;
     border-bottom: 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--bar);
     padding: 8px 12px max(8px, env(safe-area-inset-bottom));
   }
   body:not(.searching) {
@@ -83,8 +85,7 @@ body.idle main {
   transition: opacity 0.2s;
 }
 body.idle #q {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-bg);
+  border-color: rgba(251, 250, 247, 0.5);
 }
 
 /* Attribution: small collapsed pill pinned bottom-right (above the bottom
@@ -128,7 +129,7 @@ body.idle #q {
 #home {
   font-weight: 700;
   font-size: 1.15rem;
-  color: var(--fg);
+  color: #fbfaf7;
 }
 #q {
   flex: 1;
@@ -136,20 +137,18 @@ body.idle #q {
   font: inherit;
   font-size: 1.1rem;
   padding: 9px 14px;
-  /* accent-tinted so the search box is the most prominent thing on screen */
-  border: 1.5px solid var(--accent);
+  border: 1px solid transparent;
   border-radius: 10px;
-  background: #1f4238;
-  color: var(--fg);
-  caret-color: var(--accent);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fbfaf7;
+  caret-color: #fbfaf7;
 }
 #q::placeholder {
-  color: var(--accent);
-  opacity: 0.7;
+  color: rgba(251, 250, 247, 0.6);
 }
 #q:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(111, 207, 178, 0.25);
+  border-color: rgba(251, 250, 247, 0.5);
 }
 
 main {
