@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>사전</title>
+    <meta name="theme-color" content="#1f6f5c" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-180.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <form id="search-form" role="search">
+        <a href="#" id="home" aria-label="처음으로">사전</a>
+        <input
+          id="q"
+          type="search"
+          placeholder="단어 검색 · 먹었는데 · doctor"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          enterkeyhint="search"
+          aria-label="검색어"
+        />
+      </form>
+    </header>
+
+    <main>
+      <section id="results" aria-live="polite"></section>
+      <article id="entry" hidden></article>
+      <p id="status" hidden></p>
+    </main>
+
+    <footer>
+      <p>
+        자료: 국립국어원 <a href="https://opendict.korean.go.kr/" rel="noopener">우리말샘</a>,
+        <a href="https://krdict.korean.go.kr/" rel="noopener">한국어기초사전</a>
+        (<a href="https://creativecommons.org/licenses/by-sa/2.0/kr/" rel="noopener">CC BY-SA 2.0 KR</a>).
+        출판물 인용 예문과 멀티미디어는 제외했습니다. <span id="built"></span>
+      </p>
+    </footer>
+
+    <script src="deinflect.js"></script>
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
