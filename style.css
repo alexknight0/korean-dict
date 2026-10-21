@@ -67,6 +67,30 @@ header {
   border-bottom: 1px solid var(--line);
   padding: max(10px, env(safe-area-inset-top)) 14px 10px;
 }
+/* Phones: search bar pinned to the bottom (thumb reach). --kb is the on-screen
+   keyboard height, set from visualViewport in app.js, so the bar sits on top of
+   the keyboard on iOS; Android uses interactive-widget=resizes-content instead. */
+@media (max-width: 640px) {
+  header {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: var(--kb, 0px);
+    border-bottom: 0;
+    border-top: 1px solid var(--line);
+    padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  }
+  .kb-open header {
+    padding-bottom: 8px;
+  }
+  body {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+  main {
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+}
 #search-form {
   display: flex;
   gap: 12px;

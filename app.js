@@ -456,6 +456,21 @@ $("#home").addEventListener("click", () => {
   setTimeout(() => input.focus(), 0);
 });
 
+// Keep the bottom search bar (phones) above the on-screen keyboard. iOS doesn't
+// shrink the layout viewport for the keyboard, so measure the gap ourselves.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const root = document.documentElement;
+  const onViewport = () => {
+    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    root.style.setProperty("--kb", kb + "px");
+    root.classList.toggle("kb-open", kb > 80);
+  };
+  vv.addEventListener("resize", onViewport);
+  vv.addEventListener("scroll", onViewport);
+  onViewport();
+}
+
 // Link clicks fire hashchange (and usually popstate); back/forward may fire
 // either. Route once per distinct URL.
 let lastRouted = null;

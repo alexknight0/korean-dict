@@ -47,7 +47,12 @@ def main():
         page.on("console", lambda m: m.type == "error" and errors.append(m.text))
         page.goto(base)
         expect(page.locator(".hint")).to_be_visible()
-        print("1/7 home ok")
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 844) < 2, box  # phone: search bar at bottom
+        page.set_viewport_size({"width": 1000, "height": 800})
+        assert page.locator("header").bounding_box()["y"] == 0  # desktop: at top
+        page.set_viewport_size({"width": 390, "height": 844})
+        print("1/7 home ok (bar bottom on phone, top on desktop)")
 
         type_query(page, "먹다")
         r = results(page)
