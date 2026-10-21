@@ -516,15 +516,39 @@ $("#home").addEventListener("click", () => {
   setTimeout(() => input.focus(), 0);
 });
 
-// Phones: the search bar sits at the bottom until you search; while the box is
-// focused or results are showing it moves to the top (CSS body.searching).
+// Phones: the search bar sits at the bottom and moves to the top (CSS
+// body.searching) while the search box is focused, i.e. while typing.
 function updateBar() {
-  const searching = document.activeElement === input || location.hash.startsWith("#q=");
-  document.body.classList.toggle("searching", searching);
+  document.body.classList.toggle("searching", document.activeElement === input);
 }
 input.addEventListener("focus", updateBar);
 input.addEventListener("blur", () => setTimeout(updateBar, 0));
-window.addEventListener("hashchange", updateBar);
+
+// Dismissing the on-screen keyboard (Android back/down button, iOS swipe) leaves
+// the box focused, so watch the visual viewport: it shrinks when the keyboard
+// opens and grows back when it closes. When it grows back, blur the box so the
+// bar returns to the bottom.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const KEYBOARD_MIN = 150; // px; smaller changes are browser toolbars, not a keyboard
+  let fullHeight = vv.height; // viewport height without a keyboard
+  let keyboardOpen = false;
+  vv.addEventListener("resize", () => {
+    if (document.activeElement !== input) {
+      fullHeight = vv.height; // rotation etc.
+      keyboardOpen = false;
+      return;
+    }
+    if (vv.height < fullHeight - KEYBOARD_MIN) keyboardOpen = true;
+    else if (keyboardOpen && vv.height > fullHeight - KEYBOARD_MIN / 2) {
+      keyboardOpen = false;
+      input.blur();
+    }
+  });
+  input.addEventListener("focus", () => {
+    if (!keyboardOpen && vv.height > fullHeight) fullHeight = vv.height;
+  });
+}
 
 // Link clicks fire hashchange (and usually popstate); back/forward may fire
 // either. Route once per distinct URL.

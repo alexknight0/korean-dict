@@ -66,6 +66,16 @@ def main():
         assert ys[0] < ys[1] < ys[2], ys  # top-down
         assert page.locator("header").bounding_box()["y"] < 5  # bar moved to the top while searching
         print("2/7 exact search ok (bar at top while searching):", r[:5], gloss)
+        # simulate the on-screen keyboard opening then being dismissed
+        page.set_viewport_size({"width": 390, "height": 500})
+        page.wait_for_timeout(200)
+        assert page.evaluate("document.activeElement.id") == "q"
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.wait_for_timeout(200)
+        assert page.evaluate("document.activeElement.id") != "q"
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 844) < 2, box
+        print("   keyboard dismissed -> bar back at the bottom")
 
         type_query(page, "먹었는데")
         page.wait_for_selector("ul.bases .hw")
