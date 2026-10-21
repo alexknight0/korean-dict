@@ -87,18 +87,36 @@ body.idle #q {
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
+/* Attribution: small collapsed pill pinned bottom-right (above the bottom
+   search bar on phones); it opens upwards. */
 #credit {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  max-width: min(360px, calc(100vw - 24px));
   font-size: 0.7rem;
   color: var(--muted);
-  margin: 0 0 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px 8px;
 }
 #credit summary {
   cursor: pointer;
+  margin-left: auto;
   width: max-content;
-  opacity: 0.8;
 }
 #credit p {
-  margin: 4px 0 8px;
+  margin: 4px 0;
+}
+@media (max-width: 640px) {
+  body:not(.searching) #credit {
+    bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+}
+#entry {
+  padding-bottom: 32px;
 }
 #search-form {
   display: flex;
