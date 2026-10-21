@@ -293,11 +293,10 @@ function krSection(entries) {
             el(
               "li",
               null,
-              // English first, Korean definition underneath
+              el("p", { class: "def" }, s.def),
               (s.en || []).map(([lemma, def]) =>
                 el("p", { class: "en", lang: "en" }, el("b", null, lemma), def ? " — " + def : null)
               ),
-              el("p", { class: "def ko-def" }, s.def),
               s.pat ? el("p", { class: "pat" }, "「" + s.pat + "」") : null,
               s.note ? el("p", { class: "note" }, s.note) : null,
               s.ex && s.ex.length ? krExamples(s.ex) : null,
@@ -330,9 +329,6 @@ function odSense(s) {
   return el(
     "li",
     null,
-    s.tl && s.tl.length
-      ? el("p", { class: "en od-en", lang: "en" }, s.tl.map(([lang, t]) => (lang === "영어" ? t : `${t} (${en(lang)})`)).join("; "))
-      : null,
     el(
       "p",
       { class: "def" },
@@ -344,6 +340,9 @@ function odSense(s) {
     s.pat && s.pat.length ? el("p", { class: "pat" }, "「" + s.pat.join(", ") + "」") : null,
     s.gram && s.gram.length ? el("p", { class: "note" }, s.gram.join(" ")) : null,
     s.sci ? el("p", { class: "sci" }, el("i", null, s.sci)) : null,
+    s.tl && s.tl.length
+      ? el("p", { class: "en", lang: "en" }, s.tl.map(([lang, t]) => (lang === "영어" ? t : `${t} (${en(lang)})`)).join("; "))
+      : null,
     s.ex && s.ex.length
       ? el(
           "ul",

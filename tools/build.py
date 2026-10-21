@@ -249,12 +249,6 @@ def gloss(page):
         for sense in e.get("senses", []):
             if sense.get("en"):
                 return truncate(sense["en"][0][0], GLOSS_LEN)
-    # English first: a 우리말샘 English translation beats a Korean definition
-    for w in page["od"]:
-        for sense in w["senses"]:
-            for lang, tr in sense.get("tl", []):
-                if lang == "영어" and tr:
-                    return truncate(tr, GLOSS_LEN)
     for w in page["od"]:
         for sense in w["senses"]:
             if sense.get("def"):
