@@ -10,7 +10,7 @@ import http.server
 import sys
 import threading
 
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import sync_playwright
 
 PORT = 8766
 
@@ -46,8 +46,9 @@ def main():
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: m.type == "error" and errors.append(m.text))
         page.goto(base)
-        expect(page.locator(".hint")).to_be_visible()
-        assert page.evaluate("document.body.classList.contains('idle')")
+        page.wait_for_function("document.body.classList.contains('idle')")
+        assert page.locator("#results").inner_text().strip() == ""  # no filler text when empty
+        assert page.locator("#credit").is_visible() and not page.locator("#credit p").is_visible()
         page.screenshot(path="/tmp/korean-dict-home.png")
         box = page.locator("header").bounding_box()
         assert abs(box["y"] + box["height"] - 844) < 2, box  # phone: search bar at bottom

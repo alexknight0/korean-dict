@@ -166,7 +166,7 @@ function showHome() {
     );
   } else {
     // Nothing to show: dim the page so attention goes to the search bar.
-    showList(el("p", { class: "hint" }, "Search in Korean or English. Conjugated forms work too: 먹었는데 finds 먹다."));
+    showList();
     document.body.classList.add("idle");
   }
 }
@@ -456,18 +456,7 @@ async function showEntry(key) {
     entryEl.replaceChildren(
       el("h1", null, display),
       kr.length ? krSection(kr) : null,
-      od.length ? odSection(od, key, kr.length > 0) : null,
-      el(
-        "p",
-        { class: "credit" },
-        "Source: National Institute of Korean Language, ",
-        el("a", { href: "https://krdict.korean.go.kr/", rel: "noopener" }, KR_NAME),
-        " and ",
-        el("a", { href: "https://opendict.korean.go.kr/", rel: "noopener" }, OD_NAME),
-        ", ",
-        el("a", { href: "https://creativecommons.org/licenses/by-sa/2.0/kr/", rel: "noopener" }, "CC BY-SA 2.0 KR"),
-        ". Quoted publication examples and media excluded."
-      )
+      od.length ? odSection(od, key, kr.length > 0) : null
     );
     window.scrollTo(0, 0);
     const r = await Dict.row(key).catch(() => null);

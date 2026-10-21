@@ -98,17 +98,20 @@ header {
   body {
     padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
+  /* main fills the space above the bar so result lists can sit at its bottom */
   main {
-    padding-top: max(8px, env(safe-area-inset-top));
+    padding-top: max(6px, env(safe-area-inset-top));
     padding-bottom: 8px;
-    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 64px - env(safe-area-inset-bottom) - var(--kb, 0px));
   }
   /* Result lists run bottom-up: best match sits right above the search bar. */
   #results:not([hidden]) {
+    flex: 1;
     display: flex;
     flex-direction: column-reverse;
     justify-content: flex-start;
-    min-height: calc(100dvh - 80px - env(safe-area-inset-bottom) - var(--kb, 0px));
   }
   #results ul.results {
     display: flex;
@@ -133,10 +136,18 @@ body.idle #q {
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
-.credit {
-  margin: 32px 0 8px;
+#credit {
+  font-size: 0.7rem;
   color: var(--muted);
-  font-size: 0.75rem;
+  margin: 0 0 4px;
+}
+#credit summary {
+  cursor: pointer;
+  width: max-content;
+  opacity: 0.8;
+}
+#credit p {
+  margin: 4px 0 8px;
 }
 #search-form {
   display: flex;
