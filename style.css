@@ -402,3 +402,18 @@ a.src {
   font-size: 0.75rem;
   color: var(--muted);
 }
+.ko-name {
+  font-weight: 400;
+  margin-left: 6px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+.source > h2 {
+  justify-content: flex-start;
+}
+.en {
+  font-weight: 500;
+}
+.od-en {
+  font-weight: 600;
+}
