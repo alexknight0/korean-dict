@@ -57,21 +57,25 @@ def main():
         print("2/7 exact search ok:", r[:5], gloss)
 
         type_query(page, "먹었는데")
+        page.wait_for_selector("ul.bases .hw")
         bases = page.locator("ul.bases .hw").all_inner_texts()
         assert "먹다" in bases, bases
         print("3/7 deinflection ok:", bases)
 
         type_query(page, "추워요")
+        page.wait_for_function("() => [...document.querySelectorAll('ul.bases .hw')].some(e => e.textContent === '춥다')")
         bases = page.locator("ul.bases .hw").all_inner_texts()
         assert "춥다" in bases, bases
         print("   추워요 ->", bases)
 
         type_query(page, "doctor")
+        page.wait_for_function("() => [...document.querySelectorAll('#results .hw')].some(e => e.textContent === '의사')")
         r = results(page)
         assert "의사" in r[:5], r
         print("4/7 english ok:", r[:5])
 
         type_query(page, "대")
+        page.wait_for_function("() => document.querySelector('#results .hw')?.textContent === '대'")
         r = results(page)
         assert len(r) > 20, r
         print("5/7 single-syllable prefix ok:", r[:8])
