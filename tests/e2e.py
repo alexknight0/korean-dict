@@ -93,6 +93,24 @@ def main():
         page.wait_for_function("() => !document.querySelector('#results').hidden")
         print(f"   Enter -> list of {n} completions, tap opens, back returns to list")
 
+        # Android IME: Enter while still composing must wait for compositionend, and a
+        # keyboard re-committing its text on blur (히히 -> 히히히히) must not win.
+        page.focus("#q")
+        page.fill("#q", "히히")
+        page.evaluate("document.querySelector('#q').dispatchEvent(new CompositionEvent('compositionstart'))")
+        page.evaluate("document.querySelector('#search-form').requestSubmit()")
+        assert page.evaluate("document.activeElement.id") == "q"  # not blurred mid-composition
+        page.evaluate("""() => {
+            const q = document.querySelector('#q');
+            q.addEventListener('blur', () => { q.value += q.value; q.dispatchEvent(new Event('input')); }, { once: true });
+            q.dispatchEvent(new CompositionEvent('compositionend'));
+        }""")
+        page.wait_for_timeout(400)
+        assert page.input_value("#q") == "히히", page.input_value("#q")
+        assert page.evaluate("decodeURIComponent(location.hash)") == "#q=히히", page.evaluate("decodeURIComponent(location.hash)")
+        assert page.evaluate("document.activeElement.id") != "q"
+        print("   Enter while composing: waits, no duplicated text")
+
         type_query(page, "먹었는데")
         page.wait_for_selector("ul.bases .hw")
         bases = page.locator("ul.bases .hw").all_inner_texts()

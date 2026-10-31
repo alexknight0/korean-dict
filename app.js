@@ -580,15 +580,53 @@ function goSearch() {
 }
 input.addEventListener("input", () => {
   clearTimeout(debounce);
+  // A keyboard re-committing its text just after Enter blurred the box (see below).
+  if (lastSubmit && document.activeElement !== input && Date.now() - lastSubmit.t < 1000) {
+    if (input.value !== lastSubmit.q) input.value = lastSubmit.q;
+    return;
+  }
   debounce = setTimeout(goSearch, 120);
 });
 
 // Enter: show the result list for what was typed (no auto-opening the first
 // match) and close the keyboard so the whole list is visible to tap from.
-$("#search-form").addEventListener("submit", (e) => {
-  e.preventDefault();
+// Android keyboards (Korean especially) may still be composing when Enter is
+// pressed (text underlined). Blurring then makes the keyboard commit the
+// composing text a second time (히히 -> 히히히히), so wait for compositionend,
+// and if the text still changes during the blur, the submitted text wins.
+let composing = false;
+let pendingSubmit = null;
+let lastSubmit = null; // {q, t}: text and time of the last Enter
+input.addEventListener("compositionstart", () => (composing = true));
+input.addEventListener("compositionend", () => {
+  composing = false;
+  const run = pendingSubmit;
+  pendingSubmit = null;
+  if (run) setTimeout(run, 0); // let the committed text land in input.value first
+});
+
+function submitSearch() {
+  const q = input.value;
+  lastSubmit = { q, t: Date.now() };
   goSearch();
   input.blur();
+  setTimeout(() => {
+    if (input.value === q) return;
+    clearTimeout(debounce);
+    input.value = q;
+    goSearch();
+  }, 50);
+}
+
+$("#search-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!composing) return submitSearch();
+  const run = () => {
+    if (pendingSubmit === run) pendingSubmit = null;
+    submitSearch();
+  };
+  pendingSubmit = run;
+  setTimeout(() => pendingSubmit === run && run(), 300); // keyboard never ended the composition
 });
 
 input.addEventListener("focus", () => {
