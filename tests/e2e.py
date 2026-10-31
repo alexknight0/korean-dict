@@ -124,6 +124,18 @@ def main():
         page.wait_for_function("() => !document.querySelector('#results').hidden")
         print("7/7 relation link + back ok:", target)
 
+        # reader groups + hanja meanings (음악 = 音樂: 樂 must read 악 here, not 락/낙)
+        page.goto(base + "#w=음악")
+        page.wait_for_selector(".hanja-word")
+        groups = page.locator(".group-h").all_inner_texts()
+        assert groups[0].startswith("For English readers") and groups[1].startswith("For Korean readers"), groups
+        assert page.locator(".group.for-en .source.kr").count() == 1
+        assert page.locator(".group.for-ko .source.od").count() == 1
+        first = page.locator(".hanja-word").first
+        assert first.locator(".hanja-head .hz").inner_text() == "音樂"
+        assert first.locator("li .rd").all_inner_texts() == ["음", "악"]
+        print("8/8 reader groups + hanja ok:", first.inner_text().replace("\n", " ")[:70])
+
         page.screenshot(path="/tmp/korean-dict-results.png")
         page.goto(base + "#w=" + "가다")
         page.wait_for_selector("#entry h1")

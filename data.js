@@ -141,5 +141,15 @@ const Dict = (() => {
     return out;
   }
 
-  return { init, toKey, prefixRows, row, entry, aliases, baseForms, english };
+  /** Hanja data {char: [readings "낙 락", English meaning]} for the given characters. */
+  async function hanja(chars) {
+    await init();
+    const n = meta.hanjaShards;
+    if (!n) return {};
+    const shards = [...new Set([...chars].map((c) => c.codePointAt(0) % n))];
+    const files = await Promise.all(shards.map((s) => load(`h/${s.toString(16).padStart(2, "0")}.json.gz`)));
+    return Object.assign({}, ...files.filter(Boolean));
+  }
+
+  return { init, toKey, prefixRows, row, entry, aliases, baseForms, english, hanja };
 })();

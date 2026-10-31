@@ -8,6 +8,8 @@ gzipped JSON; the client inflates it with DecompressionStream.
   i/<prefix>.json.gz      headword prefix index (see build_prefix_index)
   a/<hhh>.json.gz         conjugated form -> [keys], sharded by fnv1a(form) % ALIAS_SHARDS
   en/<abc>.json.gz        English word -> Korean headwords, bucketed by first 3 letters
+  h/<nn>.json.gz          hanja -> [Korean readings, English meaning] from Unicode's
+                          Unihan database, sharded by codepoint % HANJA_SHARDS
 
 A "key" is a headword with spaces, '^' and '-' removed, so 먹다 / -가 / 가- / 가
 group naturally and the user never has to type morpheme boundaries.
@@ -18,16 +20,23 @@ import collections
 import datetime
 import glob
 import gzip
+import io
 import json
 import os
 import re
 import shutil
+import urllib.request
+import zipfile
 
 DEFAULT_IN = os.path.expanduser("~/.tmp/korean-dict/parsed")
 DEFAULT_OUT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+DEFAULT_UNIHAN = os.path.expanduser("~/.tmp/korean-dict/unihan")
+UNIHAN_URL = "https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip"
 
 ENTRY_SHARDS = 4096
 ALIAS_SHARDS = 1024
+HANJA_SHARDS = 32
+HANJA_DEF_LEN = 70  # Unihan definitions run to 400+ chars; cut at a ';' or ',' before this
 INDEX_LIMIT = 1500  # max rows in a prefix file before it is split by the next char
 INDEX_TOP = 60  # rows kept in a split prefix file (shown while typing short prefixes)
 MAX_RELATIONS = 40  # per sense; some 상위어 lists run to thousands
@@ -402,6 +411,69 @@ def build_english(pages, rank_of, out_dir):
     print(f"english: {sum(len(d) for d in rows.values())} rows in {len(rows)} buckets")
 
 
+# ---------------------------------------------------------------- hanja
+
+
+def load_unihan(unihan_dir):
+    """{char: [readings "가 락", English definition]} from Unihan (downloaded if absent)."""
+    readings_path = os.path.join(unihan_dir, "Unihan_Readings.txt")
+    if not os.path.exists(readings_path):
+        print(f"downloading {UNIHAN_URL}")
+        os.makedirs(unihan_dir, exist_ok=True)
+        with urllib.request.urlopen(UNIHAN_URL) as res:
+            zipfile.ZipFile(io.BytesIO(res.read())).extractall(unihan_dir)
+
+    def rows(name):
+        with open(os.path.join(unihan_dir, name), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("U+"):
+                    cp, field, value = line.rstrip("\n").split("\t", 2)
+                    yield chr(int(cp[2:], 16)), field, value
+
+    defs, reads = {}, {}
+    for ch, field, value in rows("Unihan_Readings.txt"):
+        if field == "kDefinition":
+            defs[ch] = value
+        elif field == "kHangul":  # "낙:0 락:0E" -> "낙 락"
+            reads[ch] = " ".join(r.split(":")[0] for r in value.split())
+    # CJK compatibility ideographs (e.g. U+F9xx, used in Korean for alternative
+    # readings) have no data of their own; use their unified character's.
+    compat = {ch: chr(int(v[2:], 16)) for ch, f, v in rows("Unihan_IRGSources.txt") if f == "kCompatibilityVariant"}
+    table = {}
+    for ch in set(defs) | set(reads) | set(compat):
+        u = compat.get(ch, ch)
+        if u in defs or u in reads:
+            table[ch] = [reads.get(u, ""), short_def(defs.get(u, ""))]
+    return table
+
+
+def short_def(d):
+    d = re.sub(r";?\s*Kangxi radical \d+", "", d).strip("; ")
+    if len(d) <= HANJA_DEF_LEN:
+        return d
+    cut = max(d.rfind(";", 0, HANJA_DEF_LEN), d.rfind(",", 0, HANJA_DEF_LEN))
+    return d[:cut] if cut > 0 else truncate(d, HANJA_DEF_LEN)
+
+
+def build_hanja(pages, unihan_dir, out_dir):
+    """Hanja used anywhere in the word origins -> h/<codepoint % HANJA_SHARDS>.json.gz."""
+    used = set()
+    for page in pages.values():
+        for e in page["kr"]:
+            used.update(e.get("origin", ""))
+        for w in page["od"]:
+            orig = w.get("orig", "")
+            used.update(orig if isinstance(orig, str) else "".join(o for t, o in orig if t == "한자"))
+    table = load_unihan(unihan_dir)
+    shards = collections.defaultdict(dict)
+    for ch in used & set(table):
+        shards[ord(ch) % HANJA_SHARDS][ch] = table[ch]
+    os.makedirs(out_dir)
+    for n, d in shards.items():
+        write_json(os.path.join(out_dir, f"{n:02x}.json.gz"), dict(sorted(d.items())))
+    print(f"hanja: {sum(len(d) for d in shards.values())} characters in {len(shards)} shards")
+
+
 # ---------------------------------------------------------------- main
 
 
@@ -409,6 +481,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_dir", default=DEFAULT_IN)
     ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--unihan", default=DEFAULT_UNIHAN, help="Unihan text files (downloaded here if missing)")
     args = ap.parse_args()
 
     od_words = load_opendict(args.in_dir)
@@ -454,6 +527,7 @@ def main():
     index_files = build_prefix_index(rows, os.path.join(args.out, "i"))
     n_alias = build_aliases(pages, os.path.join(args.out, "a"))
     build_english(pages, rank_of, os.path.join(args.out, "en"))
+    build_hanja(pages, args.unihan, os.path.join(args.out, "h"))
 
     with open(os.path.join(args.out, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(
@@ -461,6 +535,7 @@ def main():
                 "built": datetime.date.today().isoformat(),
                 "entryShards": ENTRY_SHARDS,
                 "aliasShards": ALIAS_SHARDS,
+                "hanjaShards": HANJA_SHARDS,
                 "keys": len(pages),
                 "krdict": len(kr_entries),
                 "indexFiles": index_files,

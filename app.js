@@ -428,6 +428,89 @@ function odSection(words, key, hasKr) {
   );
 }
 
+const HAN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u{20000}-\u{3ffff}]/u;
+const HANJA_SHOWN = 8; // hanja words shown before "N more"
+
+/** Distinct hanja spellings on the page: [{text, word, gloss?}], 기초사전 first. */
+function hanjaItems(page, key) {
+  const items = new Map();
+  const add = (text, word, gloss) => {
+    if (!text || !HAN.test(text)) return;
+    const it = items.get(text);
+    if (!it) items.set(text, { text, word, gloss });
+    else if (!it.gloss) it.gloss = gloss;
+  };
+  for (const e of page.kr || []) {
+    const s = (e.senses || [])[0];
+    add(e.origin, e.w, s && s.en && s.en[0] ? s.en[0][0] : null);
+  }
+  for (const w of page.od || []) {
+    const text = typeof w.orig === "string" ? w.orig : (w.orig || []).map(([, o]) => o).join("");
+    const tl = w.senses.flatMap((s) => s.tl || []).find(([lang]) => lang === "영어");
+    add(text, w.w || key, tl ? tl[1] : null);
+  }
+  return [...items.values()];
+}
+
+/** One hanja spelling with each character's reading and English meaning. */
+function hanjaRow(item, table) {
+  const chars = Array.from(item.text.replace(/[\s^\-]/g, ""));
+  // When the spelling lines up with the headword syllable by syllable, show the
+  // reading used in this word (樂 in 음악 -> 악) instead of every reading.
+  const syl = Array.from(Dict.toKey(item.word));
+  const aligned = syl.length === chars.length;
+  const seen = new Set();
+  const lines = [];
+  chars.forEach((c, i) => {
+    if (!HAN.test(c) || seen.has(c) || !table[c]) return;
+    seen.add(c);
+    const [readings, def] = table[c];
+    const all = readings ? readings.split(" ") : [];
+    const reading = aligned && all.includes(syl[i]) ? syl[i] : all.join("/");
+    lines.push(
+      el("li", null, el("span", { class: "hz" }, c), el("span", { class: "rd" }, reading), el("span", { lang: "en" }, def))
+    );
+  });
+  if (!lines.length) return null;
+  return el(
+    "div",
+    { class: "hanja-word" },
+    el("p", { class: "hanja-head" }, el("span", { class: "hz" }, item.text), item.gloss ? el("span", { class: "en", lang: "en" }, item.gloss) : null),
+    el("ul", { class: "hanja-chars" }, lines)
+  );
+}
+
+/** Hanja meanings (Unihan). The character data loads after the page renders. */
+function hanjaSection(page, key) {
+  const items = hanjaItems(page, key);
+  if (!items.length) return null;
+  const section = el("section", { class: "source hanja" }, el("h2", null, "Hanja meanings", el("span", { class: "ko-name" }, "한자")));
+  const drop = () => {
+    const group = section.closest(".group");
+    section.remove();
+    if (group && !group.querySelector("section")) group.remove();
+  };
+  const chars = items.flatMap((it) => Array.from(it.text).filter((c) => HAN.test(c)));
+  Dict.hanja(chars)
+    .then((table) => {
+      const rows = items.map((it) => hanjaRow(it, table)).filter(Boolean);
+      if (!rows.length) return drop();
+      section.append(...rows.slice(0, HANJA_SHOWN));
+      if (rows.length > HANJA_SHOWN) {
+        section.append(el("details", { class: "more-hanja" }, el("summary", null, `${rows.length - HANJA_SHOWN} more`), rows.slice(HANJA_SHOWN)));
+      }
+    })
+    .catch(drop);
+  return section;
+}
+
+/** A group of dictionary sections for one kind of reader; null when empty. */
+function readerGroup(cls, title, koTitle, sections) {
+  sections = sections.filter(Boolean);
+  if (!sections.length) return null;
+  return el("div", { class: "group " + cls }, el("h2", { class: "group-h" }, title, el("span", { class: "ko-name" }, koTitle)), sections);
+}
+
 async function showEntry(key) {
   document.body.classList.remove("idle");
   $("#credit").hidden = false;
@@ -453,8 +536,9 @@ async function showEntry(key) {
     if (document.activeElement !== input) input.value = display;
     entryEl.replaceChildren(
       el("h1", null, display),
-      kr.length ? krSection(kr) : null,
-      od.length ? odSection(od, key, kr.length > 0) : null
+      // 기초사전 is written for learners (English equivalents); 우리말샘 for native speakers.
+      readerGroup("for-en", "For English readers", "영어 풀이", [kr.length ? krSection(kr) : null, hanjaSection(page, key)]),
+      readerGroup("for-ko", "For Korean readers", "한국어 풀이", [od.length ? odSection(od, key, kr.length > 0) : null])
     );
     window.scrollTo(0, 0);
     const r = await Dict.row(key).catch(() => null);

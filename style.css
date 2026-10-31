@@ -433,6 +433,61 @@ a.src {
 .source > h2 {
   justify-content: flex-start;
 }
+
+/* entry page groups: learner (English) dictionaries, then Korean-only ones */
+.group {
+  margin-top: 20px;
+}
+.group-h {
+  justify-content: flex-start;
+  font-size: 0.95rem;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 0 0 4px;
+}
+
+/* hanja meanings */
+.hanja-word {
+  margin: 10px 0 14px;
+}
+.hanja-head {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+}
+.hanja-head .hz {
+  font-size: 1.3rem;
+}
+ul.hanja-chars {
+  list-style: none;
+  margin: 2px 0 0;
+  padding-left: 0.3em;
+}
+ul.hanja-chars li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0;
+  font-size: 0.92rem;
+}
+ul.hanja-chars .hz {
+  font-size: 1.1rem;
+  min-width: 1.2em;
+}
+.rd {
+  color: var(--muted);
+  flex: none;
+  min-width: 1.6em;
+}
+.more-hanja > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 body.idle::before {
   content: "";
   position: fixed;
