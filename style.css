@@ -131,6 +131,54 @@ body.idle #q {
   font-size: 1.15rem;
   color: #fbfaf7;
 }
+/* version light next to the brand (see the "version check" section of app.js).
+   Colours are brighter than usual because it sits on the green search bar. */
+.version {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -6px; /* sit close to 사전 */
+  padding: 6px 4px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #fbfaf7;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  flex: none;
+}
+.version i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 2px solid rgba(251, 250, 247, 0.55);
+}
+.version[data-state="ok"] i {
+  background: #6ee7a0;
+  border-color: #d9fbe6;
+  border-width: 1px;
+}
+.version[data-state="stale"] {
+  background: #d97706;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+.version[data-state="stale"] i {
+  background: #fbfaf7;
+  border-color: #fbfaf7;
+}
+.version[data-state="updating"] i {
+  border-color: #fbfaf7;
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 #q {
   flex: 1;
   min-width: 0;

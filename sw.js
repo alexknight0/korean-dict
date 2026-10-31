@@ -3,7 +3,7 @@
 // new URLs and old entries are dropped on activate).
 const SHELL = "shell-v1";
 const DATA = "data";
-const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "data.js", "deinflect.js", "manifest.webmanifest", "icons/icon.svg"];
+const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "data.js", "deinflect.js", "version.js", "manifest.webmanifest", "icons/icon.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)));
