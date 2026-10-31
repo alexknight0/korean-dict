@@ -170,6 +170,24 @@ def main():
         assert first.locator("li .rd").all_inner_texts() == ["음", "악"]
         print("8/8 reader groups + hanja ok:", first.inner_text().replace("\n", " ")[:70])
 
+        # the bottom search bar must stay on top of a group heading scrolled under it
+        page.goto(base + "#w=대박")
+        page.wait_for_selector(".hanja-word")
+        page.evaluate("""() => {
+            const h = document.querySelector('.group.for-ko .group-h');
+            const bar = document.querySelector('header').getBoundingClientRect();
+            scrollTo(0, h.getBoundingClientRect().top + scrollY - bar.top + 10);  // heading straddles the bar's top edge
+        }""")
+        page.wait_for_timeout(100)
+        on_top = page.evaluate("""() => {
+            const y = document.querySelector('header').getBoundingClientRect().top + 5;
+            const h = document.querySelector('.group.for-ko .group-h').getBoundingClientRect();
+            if (!(h.top < y && h.bottom > y)) return 'heading not under the bar: ' + h.top;
+            return !!document.elementFromPoint(200, y).closest('header');
+        }""")
+        assert on_top is True, on_top
+        print("   search bar stays above group headings")
+
         page.screenshot(path="/tmp/korean-dict-results.png")
         page.goto(base + "#w=" + "가다")
         page.wait_for_selector("#entry h1")
