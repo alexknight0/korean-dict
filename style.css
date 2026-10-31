@@ -434,18 +434,40 @@ a.src {
   justify-content: flex-start;
 }
 
-/* entry page groups: learner (English) dictionaries, then Korean-only ones */
+/* entry page groups: learner (English) dictionaries, then Korean-only ones.
+   A coloured rail runs the full height of each group and joins its heading, so
+   the heading visibly owns everything beneath it. */
 .group {
-  margin-top: 20px;
+  --g: var(--accent);
+  --g-bg: var(--accent-bg);
+  margin-top: 24px;
+  border-left: 3px solid var(--g);
+  padding-left: 12px;
+}
+.group.for-ko {
+  --g: #8ab4f8;
+  --g-bg: #1d2735;
 }
 .group-h {
   justify-content: flex-start;
   font-size: 0.95rem;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border-radius: 6px;
-  padding: 6px 10px;
-  margin: 0 0 4px;
+  color: var(--g);
+  background: var(--g-bg);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+  margin: 0 0 4px -12px; /* flush against the rail */
+}
+.group-h .ko-name {
+  color: var(--g);
+}
+/* Phones (search bar at the bottom): keep the current group's heading pinned at
+   the top while scrolling through it. */
+@media (max-width: 640px) {
+  body:not(.searching) .group-h {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
 }
 
 /* hanja meanings */
