@@ -37,6 +37,8 @@ ENTRY_SHARDS = 4096
 ALIAS_SHARDS = 1024
 HANJA_SHARDS = 32
 HANJA_DEF_LEN = 70  # Unihan definitions run to 400+ chars; cut at a ';' or ',' before this
+HANJA_WORDS_LIMIT = 300  # words listed per hanja (大 is in tens of thousands)
+HAN = re.compile("[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0003ffff]")  # same as app.js
 INDEX_LIMIT = 1500  # max rows in a prefix file before it is split by the next char
 INDEX_TOP = 60  # rows kept in a split prefix file (shown while typing short prefixes)
 MAX_RELATIONS = 40  # per sense; some 상위어 lists run to thousands
@@ -474,6 +476,59 @@ def build_hanja(pages, unihan_dir, out_dir):
     print(f"hanja: {sum(len(d) for d in shards.values())} characters in {len(shards)} shards")
 
 
+def hanja_spellings(page, key):
+    """Distinct hanja spellings on a page, in page order: [(spelling, gloss, level, tier)].
+    Same grouping as hanjaItems() in app.js; the gloss is for that homonym. tier ranks
+    the homonym itself (0 learner word ... 4 dialect/archaic only), lower first."""
+    out = {}
+
+    def add(text, gloss, level, tier):
+        if not text or not HAN.search(text):
+            return
+        if text not in out:
+            out[text] = [gloss, level, tier]
+        else:
+            out[text][0] = out[text][0] or gloss
+            out[text][2] = min(out[text][2], tier)
+
+    for e in page["kr"]:
+        s = (e.get("senses") or [{}])[0]
+        en = s.get("en") or []
+        level = e.get("level")
+        add(e.get("origin"), en[0][0] if en else s.get("def", ""), level, 0 if level in LEVEL_SCORE else 1)
+    for w in page["od"]:
+        orig = w.get("orig", "")
+        text = orig if isinstance(orig, str) else "".join(o for _, o in orig)
+        tl = next((t for s in w["senses"] for lang, t in s.get("tl", []) if lang == "영어"), None)
+        general = [s for s in w["senses"] if "type" not in s]
+        tier = 4 if not general else 3 if all(s.get("cat") for s in general) else 2
+        add(text, tl or next((s["def"] for s in w["senses"] if s.get("def")), ""), None, tier)
+    return [(t, truncate(g or "", GLOSS_LEN), lv, tier) for t, (g, lv, tier) in out.items()]
+
+
+def build_hanja_words(pages, keys, out_dir):
+    """Words written with each hanja -> hw/<codepoint hex>.json.gz, best first.
+    {"n": total, "r": [[key, display, spelling, gloss, level?], ...]} (top HANJA_WORDS_LIMIT)."""
+    by_char = collections.defaultdict(list)
+    for rank, k in enumerate(keys):
+        page = pages[k]
+        disp = display(k, page)
+        for spelling, gloss_, level, tier in hanja_spellings(page, k):
+            row = [k, disp, spelling, gloss_]
+            if level in LEVEL_SCORE:
+                row.append(level[0])
+            for ch in dict.fromkeys(HAN.findall(spelling)):
+                by_char[ch].append((tier, rank, row))
+    os.makedirs(out_dir)
+    for i, (ch, items) in enumerate(by_char.items(), 1):
+        items.sort(key=lambda x: x[:2])  # stable: page order breaks ties
+        rows = [row for _, _, row in items[:HANJA_WORDS_LIMIT]]
+        write_json(os.path.join(out_dir, f"{ord(ch):x}.json.gz"), {"n": len(items), "r": rows})
+        if i % 2000 == 0:
+            print(f"hanja words {i}/{len(by_char)}")
+    print(f"hanja words: {len(by_char)} files")
+
+
 # ---------------------------------------------------------------- main
 
 
@@ -528,6 +583,7 @@ def main():
     n_alias = build_aliases(pages, os.path.join(args.out, "a"))
     build_english(pages, rank_of, os.path.join(args.out, "en"))
     build_hanja(pages, args.unihan, os.path.join(args.out, "h"))
+    build_hanja_words(pages, keys, os.path.join(args.out, "hw"))
 
     with open(os.path.join(args.out, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(

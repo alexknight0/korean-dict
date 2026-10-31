@@ -151,5 +151,11 @@ const Dict = (() => {
     return Object.assign({}, ...files.filter(Boolean));
   }
 
-  return { init, toKey, prefixRows, row, entry, aliases, baseForms, english, hanja };
+  /** Words written with a hanja: {n: total, r: [[key, display, spelling, gloss, level?], ...]} or null. */
+  async function hanjaWords(ch) {
+    await init();
+    return load(`hw/${ch.codePointAt(0).toString(16)}.json.gz`);
+  }
+
+  return { init, toKey, prefixRows, row, entry, aliases, baseForms, english, hanja, hanjaWords };
 })();

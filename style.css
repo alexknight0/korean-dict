@@ -548,6 +548,36 @@ ul.hanja-chars .hz {
   font-size: 1.1rem;
   min-width: 1.2em;
 }
+/* each character links to the words written with it (#h=) */
+ul.hanja-chars a.hz {
+  color: var(--accent);
+  text-decoration: underline dotted 1px;
+  text-underline-offset: 4px;
+}
+
+/* hanja page */
+.hanja-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0 4px;
+}
+.hanja-title h1 {
+  font-size: 3.4rem;
+  margin: 0;
+  line-height: 1.1;
+}
+.hanja-title p {
+  margin: 2px 0;
+}
+.hanja-title .rd {
+  font-size: 1.1rem;
+}
+ul.hanja-words .note {
+  order: 0; /* spelling after the headword (bases put their note first) */
+  font-size: 1rem;
+  color: var(--fg);
+}
 .rd {
   color: var(--muted);
   flex: none;

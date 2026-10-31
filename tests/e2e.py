@@ -188,6 +188,23 @@ def main():
         assert on_top is True, on_top
         print("   search bar stays above group headings")
 
+        # tap a hanja -> words written with it -> tap one -> back to the list
+        page.goto(base + "#w=대학")
+        page.wait_for_selector("ul.hanja-chars a.hz")
+        page.click("ul.hanja-chars a.hz >> text=大")
+        page.wait_for_selector("ul.hanja-words li")
+        assert page.inner_text(".hanja-title h1") == "大"
+        assert "big" in page.inner_text(".hanja-title"), page.inner_text(".hanja-title")
+        hw = page.locator("ul.hanja-words .hw").all_inner_texts()
+        assert "대학" in hw[:10], hw[:10]
+        assert all("大" in s for s in page.locator("ul.hanja-words .note").all_inner_texts())
+        page.screenshot(path="/tmp/korean-dict-hanja-page.png")
+        page.click("ul.hanja-words li a >> text=대회")
+        page.wait_for_function("() => document.querySelector('#entry h1')?.textContent === '대회'")
+        page.go_back()
+        page.wait_for_selector("ul.hanja-words li")
+        print("   hanja page ok:", hw[:6])
+
         page.screenshot(path="/tmp/korean-dict-results.png")
         page.goto(base + "#w=" + "가다")
         page.wait_for_selector("#entry h1")

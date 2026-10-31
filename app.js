@@ -99,6 +99,7 @@ function marked(text) {
 }
 
 const wordHref = (key) => "#w=" + encodeURIComponent(key);
+const hanjaHref = (ch) => "#h=" + encodeURIComponent(ch);
 
 function wordLink(display, key, hom) {
   return el("a", { href: wordHref(key || Dict.toKey(display)) }, display, hom ? el("sup", null, hom) : null);
@@ -468,7 +469,13 @@ function hanjaRow(item, table) {
     const all = readings ? readings.split(" ") : [];
     const reading = aligned && all.includes(syl[i]) ? syl[i] : all.join("/");
     lines.push(
-      el("li", null, el("span", { class: "hz" }, c), el("span", { class: "rd" }, reading), el("span", { lang: "en" }, def))
+      el(
+        "li",
+        null,
+        el("a", { class: "hz", href: hanjaHref(c), title: `Words using ${c}` }, c),
+        el("span", { class: "rd" }, reading),
+        el("span", { lang: "en" }, def)
+      )
     );
   });
   if (!lines.length) return null;
@@ -548,12 +555,58 @@ async function showEntry(key) {
   }
 }
 
+// ------------------------------------------------------------------ hanja page
+
+/** #h=<char>: the character's readings and meaning, then the words written with it. */
+async function showHanja(ch) {
+  document.body.classList.remove("idle");
+  $("#credit").hidden = false;
+  $("#credit").open = false;
+  ++searchToken; // cancel any pending search render
+  resultsEl.hidden = true;
+  entryEl.hidden = false;
+  entryEl.replaceChildren();
+  document.title = ch + " - 사전";
+  if (document.activeElement !== input) input.value = "";
+  setStatus("Loading…");
+  try {
+    const [info, words] = await Promise.all([Dict.hanja([ch]), Dict.hanjaWords(ch)]);
+    setStatus("");
+    const [readings, def] = info[ch] || ["", ""];
+    const rows = words ? words.r : [];
+    entryEl.replaceChildren(
+      el(
+        "div",
+        { class: "hanja-title" },
+        el("h1", { class: "hz" }, ch),
+        el("div", null, readings ? el("p", { class: "rd" }, readings.split(" ").join(" · ")) : null, def ? el("p", { lang: "en" }, def) : null)
+      ),
+      el(
+        "h2",
+        null,
+        words ? `${words.n.toLocaleString()} ${words.n === 1 ? "word" : "words"} using ${ch}` : `No words using ${ch}`,
+        words && words.n > rows.length ? el("span", { class: "ko-name" }, `top ${rows.length} shown`) : null
+      ),
+      rows.length
+        ? el("ul", { class: "results hanja-words" }, rows.map(([key, disp, spelling, gloss, level]) => resultItem(key, disp, gloss, level, spelling)))
+        : null
+    );
+    window.scrollTo(0, 0);
+  } catch (err) {
+    setStatus("Failed to load: " + err.message);
+  }
+}
+
 // ------------------------------------------------------------------ routing
 
 function route() {
   const hash = location.hash.slice(1);
   const params = new URLSearchParams(hash);
-  if (params.has("w")) {
+  if (params.has("h")) {
+    const ch = Array.from(params.get("h"))[0];
+    if (ch) showHanja(ch);
+    else showHome();
+  } else if (params.has("w")) {
     const key = params.get("w");
     showEntry(key);
   } else if (params.has("q")) {
@@ -574,7 +627,7 @@ function goSearch() {
   clearTimeout(debounce);
   const q = input.value;
   const hash = q.trim() ? "#q=" + encodeURIComponent(q) : "#";
-  if (location.hash.startsWith("#w=") || !location.hash) history.pushState(null, "", hash);
+  if (/^#[wh]=/.test(location.hash) || !location.hash) history.pushState(null, "", hash);
   else history.replaceState(null, "", hash);
   routeOnce();
 }
