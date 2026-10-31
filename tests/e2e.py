@@ -77,6 +77,22 @@ def main():
         assert abs(box["y"] + box["height"] - 844) < 2, box
         print("   keyboard dismissed -> bar back at the bottom")
 
+        # Enter shows the completion list instead of opening the first match
+        page.focus("#q")
+        page.fill("#q", "먹")
+        page.keyboard.press("Enter")
+        page.wait_for_function("() => document.querySelector('#results .hw')?.textContent === '먹'")
+        assert page.evaluate("location.hash").startswith("#q="), page.evaluate("location.hash")
+        assert page.locator("#entry").is_hidden()
+        assert page.evaluate("document.activeElement.id") != "q"  # keyboard closed
+        n = len(results(page))
+        assert n > 5, n
+        page.click("#results li a >> nth=1")
+        page.wait_for_selector("#entry h1")
+        page.go_back()
+        page.wait_for_function("() => !document.querySelector('#results').hidden")
+        print(f"   Enter -> list of {n} completions, tap opens, back returns to list")
+
         type_query(page, "먹었는데")
         page.wait_for_selector("ul.bases .hw")
         bases = page.locator("ul.bases .hw").all_inner_texts()

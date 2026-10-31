@@ -569,22 +569,25 @@ function route() {
 }
 
 let debounce;
+/** Show results for the box's text (typing replaces the history entry; leaving a word pushes one). */
+function goSearch() {
+  clearTimeout(debounce);
+  const q = input.value;
+  const hash = q.trim() ? "#q=" + encodeURIComponent(q) : "#";
+  if (location.hash.startsWith("#w=") || !location.hash) history.pushState(null, "", hash);
+  else history.replaceState(null, "", hash);
+  routeOnce();
+}
 input.addEventListener("input", () => {
   clearTimeout(debounce);
-  debounce = setTimeout(() => {
-    const q = input.value;
-    const hash = q.trim() ? "#q=" + encodeURIComponent(q) : "#";
-    // typing replaces the current history entry; opening a word pushes a new one
-    if (location.hash.startsWith("#w=") || !location.hash) history.pushState(null, "", hash);
-    else history.replaceState(null, "", hash);
-    routeOnce();
-  }, 120);
+  debounce = setTimeout(goSearch, 120);
 });
 
+// Enter: show the result list for what was typed (no auto-opening the first
+// match) and close the keyboard so the whole list is visible to tap from.
 $("#search-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  const first = resultsEl.querySelector("ul.results a");
-  if (first && !resultsEl.hidden) location.hash = first.getAttribute("href");
+  goSearch();
   input.blur();
 });
 
