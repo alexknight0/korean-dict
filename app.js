@@ -741,13 +741,19 @@ async function checkVersion() {
 versionBtn.addEventListener("pointerdown", (e) => e.preventDefault());
 versionBtn.addEventListener("click", async () => {
   const state = versionBtn.dataset.state;
+  if (state === "checking" || state === "updating") return;
   if (state !== "stale") {
-    setStatus(versionBtn.title);
+    // Green or grey dot: re-check now and say what came of it.
     clearTimeout(versionStatusTimer);
+    setVersionState("checking");
+    setStatus(versionBtn.title);
+    await checkVersion();
+    setStatus(versionBtn.title);
     versionStatusTimer = setTimeout(() => statusEl.textContent === versionBtn.title && setStatus(""), 4000);
-    if (state === "unknown") checkVersion();
     return;
   }
+  clearTimeout(versionStatusTimer);
+  if (statusEl.textContent === versionBtn.title) setStatus("");
   setVersionState("updating");
   // Fetch every shell file past the HTTP cache. The requests go through the service
   // worker (network-first), which also stores the fresh copies in its shell cache, so

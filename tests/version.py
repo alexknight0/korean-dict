@@ -36,12 +36,16 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 390, "height": 844}, service_workers="block", locale="en-AU")
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    state = {"deployed": OLD, "running": OLD, "offline": False}
+    state = {"deployed": OLD, "running": OLD, "offline": False, "delay": 0, "checks": 0, "held": []}
 
     def version(route):
         if "?t=" in route.request.url:  # the live check
             if state["offline"]:
                 return route.abort()
+            if state["delay"]:
+                state["checks"] += 1
+                state["held"].append(route)  # answered later by release()
+                return
             v = state["deployed"]
         else:  # script load / cache refresh
             v = state["running"]
@@ -75,8 +79,26 @@ with sync_playwright() as p:
     page.evaluate("window.dispatchEvent(new Event('online'))")
     page.wait_for_function("document.querySelector('#version').dataset.state === 'unknown'")
     page.click("#version")
+    page.wait_for_function("document.querySelector('#version').dataset.state === 'unknown'")
+    check("tapping grey re-checks, still offline -> explains", "Couldn't check" in page.inner_text("#status"), page.inner_text("#status"))
+
+    # tapping the green dot re-checks right away; a slow check shows "Checking…" and ignores taps
+    state["offline"] = False
+    page.evaluate("window.dispatchEvent(new Event('online'))")
+    page.wait_for_function("document.querySelector('#version').dataset.state === 'ok'")
+    state["deployed"] = "2026-11-01T00:00:00Z"
+    state["delay"] = 1  # hold the live check until released
+    page.click("#version")
+    page.wait_for_function("document.querySelector('#version').dataset.state === 'checking'")
+    check("tap green -> checking", "Checking" in page.inner_text("#status"), page.inner_text("#status"))
+    page.click("#version")  # ignored while checking
     page.wait_for_timeout(200)
-    check("tapping unknown explains", "Couldn't check" in page.inner_text("#status"), page.inner_text("#status"))
+    state["delay"] = 0
+    for r in state["held"]:
+        r.fulfill(body=f'const VERSION = "{state["deployed"]}";', content_type="text/javascript")
+    page.wait_for_function("document.querySelector('#version').dataset.state === 'stale'")
+    check("tap green finds new deploy -> Update", page.inner_text("#version") == "Update" and "Update available" in page.inner_text("#status"), page.inner_text("#status"))
+    check("version fetched once for the two taps", state["checks"] == 1, state["checks"])
     check("no page errors", not errors, errors)
     browser.close()
 
