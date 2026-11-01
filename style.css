@@ -79,10 +79,13 @@ header {
   }
 }
 
-/* Empty home: dim everything but the search bar. */
-body.idle main {
+/* Empty home: dim everything but the search bar (and the "Recent searches" hint). */
+body.idle main > :not(#results) {
   opacity: 0.35;
   transition: opacity 0.2s;
+}
+.empty-recent {
+  text-align: center;
 }
 body.idle #q {
   border-color: rgba(251, 250, 247, 0.5);

@@ -163,7 +163,7 @@ function showHome() {
     );
   } else {
     // Nothing to show: dim the page so attention goes to the search bar.
-    showList();
+    showList(el("p", { class: "hint empty-recent" }, "Recent searches will display here"));
     document.body.classList.add("idle");
   }
 }

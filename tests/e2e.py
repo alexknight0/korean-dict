@@ -47,7 +47,7 @@ def main():
         page.on("console", lambda m: m.type == "error" and errors.append(m.text))
         page.goto(base)
         page.wait_for_function("document.body.classList.contains('idle')")
-        assert page.locator("#results").inner_text().strip() == ""  # no filler text when empty
+        assert page.locator("#results").inner_text().strip() == "Recent searches will display here"
         assert not page.locator("#credit").is_visible()  # attribution only on entry pages
         page.screenshot(path="/tmp/korean-dict-home.png")
         box = page.locator("header").bounding_box()
