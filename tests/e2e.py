@@ -205,6 +205,20 @@ def main():
         page.wait_for_selector("ul.hanja-words li")
         print("   hanja page ok:", hw[:6])
 
+        # root page (기특 = root of 기특하다) shows the full word's English; Naver links
+        page.goto(base + "#w=기특")
+        page.wait_for_selector(".root-word .en")
+        assert page.locator(".group.for-en .source.root").count() == 1
+        root_en = page.inner_text(".root-word")
+        assert "기특하다" in root_en and "praiseworthy" in root_en, root_en
+        assert page.locator(".source.od .def a >> text=기특하다").count() >= 1  # linked in the definition
+        hrefs = page.locator("p.ext a").evaluate_all("els => els.map(e => e.href)")
+        assert any("en.dict.naver.com" in h and "%EA%B8%B0%ED%8A%B9" in h for h in hrefs), hrefs
+        page.screenshot(path="/tmp/korean-dict-root.png")
+        page.click(".root-word h3 a")
+        page.wait_for_function("() => document.querySelector('#entry h1')?.textContent === '기특하다'")
+        print("   root page ok:", root_en.replace("\n", " ")[:70])
+
         page.screenshot(path="/tmp/korean-dict-results.png")
         page.goto(base + "#w=" + "가다")
         page.wait_for_selector("#entry h1")

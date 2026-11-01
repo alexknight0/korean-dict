@@ -555,6 +555,34 @@ ul.hanja-chars a.hz {
   text-underline-offset: 4px;
 }
 
+/* links out to Naver under the title */
+p.ext {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+p.ext a {
+  color: var(--accent);
+}
+
+/* "Root of": a root page (기특) shows the full word it belongs to (기특하다) */
+.root-word {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.root-word h3 {
+  margin: 0 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.root-word .def {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 /* hanja page */
 .hanja-title {
   display: flex;

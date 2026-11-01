@@ -344,7 +344,7 @@ function odSense(s) {
       s.type ? label("tag type", s.type) : null,
       (s.cat || []).map((c) => label("tag", c)),
       (s.reg || []).map((r) => label("tag region", r)),
-      s.def
+      defText(s.def)
     ),
     s.pat && s.pat.length ? el("p", { class: "pat" }, "「" + s.pat.join(", ") + "」") : null,
     s.gram && s.gram.length ? el("p", { class: "note" }, s.gram.join(" ")) : null,
@@ -511,6 +511,75 @@ function hanjaSection(page, key) {
   return section;
 }
 
+// 우리말샘 lists word roots (기특 of 기특하다) whose only definition is "‘기특하다’의 어근."
+const ROOT_DEF = /^‘([^’]+)’의 어근\./;
+const homonymless = (w) => w.replace(/\d+$/, "");
+
+/** Words this page is the root of: [{key, display}], in page order. */
+function rootTargets(page) {
+  const out = new Map();
+  for (const w of page.od || []) {
+    for (const s of w.senses) {
+      const m = ROOT_DEF.exec(s.def || "");
+      if (!m) continue;
+      const display = homonymless(m[1]);
+      const key = Dict.toKey(display);
+      if (!out.has(key)) out.set(key, { key, display });
+    }
+  }
+  return [...out.values()];
+}
+
+/** Definition text, with the word in "‘X’의 어근." linked. */
+function defText(def) {
+  const m = ROOT_DEF.exec(def || "");
+  if (!m) return def;
+  return ["‘", wordLink(homonymless(m[1])), def.slice(1 + m[1].length)]; // rest starts at the closing ’
+}
+
+/** "Root of": the full word's English (기초사전), else its 우리말샘 translation/definition. */
+function rootCard(target) {
+  const card = el("div", { class: "root-word" }, el("h3", null, wordLink(target.display, target.key)));
+  Dict.entry(target.key)
+    .then((page) => {
+      if (!page) return;
+      const kr = page.kr || [];
+      const level = kr.map((e) => e.level).find((l) => l && LEVEL[l[0]]);
+      if (level) card.firstChild.append(el("span", { class: "level level-" + level[0], title: level }, LEVEL[level[0]]));
+      const en = kr.flatMap((e) => (e.senses || []).flatMap((s) => s.en || []));
+      if (en.length) {
+        card.append(...en.map(([lemma, def]) => el("p", { class: "en", lang: "en" }, el("b", null, lemma), def ? " — " + def : null)));
+        return;
+      }
+      const senses = (page.od || []).flatMap((w) => w.senses);
+      const tl = senses.flatMap((s) => s.tl || []).filter(([lang]) => lang === "영어").map(([, t]) => t);
+      if (tl.length) card.append(el("p", { class: "en", lang: "en" }, tl.join("; ")));
+      const def = senses.find((s) => s.def && !ROOT_DEF.test(s.def));
+      if (def) card.append(el("p", { class: "def" }, def.def));
+    })
+    .catch(() => {});
+  return card;
+}
+
+function rootSection(page, display) {
+  const targets = rootTargets(page);
+  if (!targets.length) return null;
+  return el(
+    "section",
+    { class: "source root" },
+    el("h2", null, "Root of", el("span", { class: "ko-name" }, "어근")),
+    el("p", { class: "note" }, `${display} is a root, not used on its own. Full ${targets.length > 1 ? "words" : "word"}:`),
+    targets.map(rootCard)
+  );
+}
+
+const NAVER = {
+  en: (q) => "https://en.dict.naver.com/#/search?query=" + encodeURIComponent(q),
+  ko: (q) => "https://ko.dict.naver.com/#/search?query=" + encodeURIComponent(q),
+  hanja: (q) => "https://hanja.dict.naver.com/#/search?query=" + encodeURIComponent(q),
+};
+const extLink = (href, text) => el("a", { href, target: "_blank", rel: "noopener" }, text);
+
 /** A group of dictionary sections for one kind of reader; null when empty. */
 function readerGroup(cls, title, koTitle, sections) {
   sections = sections.filter(Boolean);
@@ -543,8 +612,13 @@ async function showEntry(key) {
     if (document.activeElement !== input) input.value = display;
     entryEl.replaceChildren(
       el("h1", null, display),
+      el("p", { class: "ext" }, "Naver: ", extLink(NAVER.en(display), "English"), " · ", extLink(NAVER.ko(display), "국어사전")),
       // 기초사전 is written for learners (English equivalents); 우리말샘 for native speakers.
-      readerGroup("for-en", "For English readers", "영어 풀이", [kr.length ? krSection(kr) : null, hanjaSection(page, key)]),
+      readerGroup("for-en", "For English readers", "영어 풀이", [
+        rootSection(page, display),
+        kr.length ? krSection(kr) : null,
+        hanjaSection(page, key),
+      ]),
       readerGroup("for-ko", "For Korean readers", "한국어 풀이", [od.length ? odSection(od, key, kr.length > 0) : null])
     );
     window.scrollTo(0, 0);
@@ -581,6 +655,7 @@ async function showHanja(ch) {
         el("h1", { class: "hz" }, ch),
         el("div", null, readings ? el("p", { class: "rd" }, readings.split(" ").join(" · ")) : null, def ? el("p", { lang: "en" }, def) : null)
       ),
+      el("p", { class: "ext" }, "Naver: ", extLink(NAVER.hanja(ch), "한자사전")),
       el(
         "h2",
         null,
