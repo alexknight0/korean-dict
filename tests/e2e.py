@@ -219,6 +219,33 @@ def main():
         page.wait_for_function("() => document.querySelector('#entry h1')?.textContent === '기특하다'")
         print("   root page ok:", root_en.replace("\n", " ")[:70])
 
+        # play button: spinner while the (slow, hotlinked) audio loads, then back to ▶; "!" on failure
+        wav = b"RIFF" + (36 + 1600).to_bytes(4, "little") + b"WAVEfmt " + (16).to_bytes(4, "little") \
+            + (1).to_bytes(2, "little") + (1).to_bytes(2, "little") + (8000).to_bytes(4, "little") \
+            + (8000).to_bytes(4, "little") + (1).to_bytes(2, "little") + (8).to_bytes(2, "little") \
+            + b"data" + (1600).to_bytes(4, "little") + bytes([128]) * 1600
+        held = []
+        page.route("https://dicmedia.korean.go.kr/**", lambda r: held.append(r))
+        page.goto(base + "#w=먹다")
+        page.wait_for_selector(".source.kr .play")
+        btn = page.locator(".source.kr .play").first
+        btn.click()
+        page.wait_for_function("() => document.querySelector('.source.kr .play').dataset.state === 'loading'")
+        page.wait_for_timeout(200)
+        assert held, "audio not requested"
+        held.pop().fulfill(body=wav, content_type="audio/wav")
+        page.wait_for_function("() => ['playing', 'idle'].includes(document.querySelector('.source.kr .play').dataset.state)")
+        page.wait_for_function("() => document.querySelector('.source.kr .play').dataset.state === 'idle'", timeout=5000)
+        assert btn.inner_text() == "▶"
+        page.unroute("https://dicmedia.korean.go.kr/**")
+        page.route("https://dicmedia.korean.go.kr/**", lambda r: r.abort())
+        bad = page.locator(".source.kr .play").nth(1)
+        bad.click()
+        page.wait_for_function("() => document.querySelectorAll('.source.kr .play')[1].dataset.state === 'error'")
+        page.unroute("https://dicmedia.korean.go.kr/**")
+        errors[:] = [e for e in errors if "ERR_FAILED" not in e]  # the deliberately aborted audio
+        print("   play button: loading spinner -> plays -> ▶, failure -> !")
+
         page.screenshot(path="/tmp/korean-dict-results.png")
         page.goto(base + "#w=" + "가다")
         page.wait_for_selector("#entry h1")

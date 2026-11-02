@@ -234,18 +234,36 @@ async function search(q) {
 
 // ------------------------------------------------------------------ entry page
 
+/** ▶ button for a hotlinked NIKL recording. The audio comes from a slow server, so the
+    button shows a spinner (data-state=loading) until sound starts, and "!" if it fails.
+    The Audio object is kept, so replays are instant. */
 function playButton(url) {
   if (!url) return null;
-  return el(
-    "button",
-    {
-      class: "play",
-      type: "button",
-      "aria-label": "Play pronunciation",
-      onclick: () => new Audio(url).play().catch(() => {}),
-    },
-    "▶"
-  );
+  let audio = null;
+  let errorTimer;
+  const btn = el("button", { class: "play", type: "button", "aria-label": "Play pronunciation", "data-state": "idle" }, "▶");
+  const set = (state) => {
+    btn.dataset.state = state;
+    btn.textContent = state === "error" ? "!" : state === "loading" ? "" : "▶";
+    btn.setAttribute("aria-label", { loading: "Loading pronunciation…", error: "Couldn't load the pronunciation. Tap to retry." }[state] || "Play pronunciation");
+  };
+  btn.addEventListener("click", () => {
+    clearTimeout(errorTimer);
+    const fail = () => {
+      set("error");
+      errorTimer = setTimeout(() => btn.dataset.state === "error" && set("idle"), 4000);
+    };
+    if (!audio || btn.dataset.state === "error") {
+      audio = new Audio(url);
+      audio.addEventListener("playing", () => set("playing"));
+      audio.addEventListener("ended", () => set("idle"));
+      audio.addEventListener("error", fail);
+    }
+    audio.currentTime = 0;
+    if (audio.readyState < 3) set("loading"); // not enough data yet: show the spinner
+    audio.play().catch((err) => err.name !== "AbortError" && fail());
+  });
+  return btn;
 }
 
 function relationList(items, homAt, keyAt) {
