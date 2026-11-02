@@ -842,80 +842,30 @@ if (document.body.classList.contains("idle") && !phone.matches) input.focus({ pr
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 // ------------------------------------------------------------------ version check
-// VERSION (version.js) is the copy that's running; version.js fetched with no-store is
-// what GitHub Pages serves now. Pages lets browsers cache files for 10 min, so a stale
-// copy is common right after a deploy.
-const APP_FILES = ["./", "index.html", "style.css", "app.js", "data.js", "deinflect.js", "version.js", "manifest.webmanifest"];
-const VERSION_CHECK_MS = 5 * 60_000;
-const versionBtn = $("#version");
-let latestVersion = null;
+// The update light is shared by Alex's Pages sites (github.com/alexknight0/pages-common).
+// sw.js keeps a copy of it for offline use. Updating fetches every shell file past the HTTP
+// cache; those requests go through the service worker (network-first), which stores the
+// fresh copies, so the reload can't pick up stale ones.
 let versionStatusTimer;
-
-function formatVersion(v) {
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-}
-
-function setVersionState(state) {
-  const labels = {
-    checking: "Checking for updates…",
-    ok: `Up to date (version ${formatVersion(VERSION)})`,
-    stale: `Update available: running ${formatVersion(VERSION)}, latest is ${formatVersion(latestVersion)}. Tap to update.`,
-    unknown: `Couldn't check for updates (offline?). Running ${formatVersion(VERSION)}.`,
-    updating: "Updating…",
-  };
-  versionBtn.dataset.state = state;
-  versionBtn.title = labels[state];
-  versionBtn.setAttribute("aria-label", labels[state]);
-  versionBtn.querySelector("span").textContent = state === "stale" ? "Update" : "";
-}
-
-async function checkVersion() {
-  try {
-    const res = await fetch(`version.js?t=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(res.status);
-    latestVersion = (await res.text()).match(/VERSION = "([^"]+)"/)?.[1];
-    if (!latestVersion) throw new Error("no version");
-    // ISO timestamps compare as strings; only a newer live copy counts as an update.
-    setVersionState(latestVersion > VERSION ? "stale" : "ok");
-  } catch {
-    setVersionState("unknown");
-  }
-}
-
-// Don't take focus from the search box (that would close the keyboard / move the bar).
-versionBtn.addEventListener("pointerdown", (e) => e.preventDefault());
-versionBtn.addEventListener("click", async () => {
-  const state = versionBtn.dataset.state;
-  if (state === "checking" || state === "updating") return;
-  if (state !== "stale") {
-    // Green or grey dot: re-check now and say what came of it.
-    clearTimeout(versionStatusTimer);
-    setVersionState("checking");
-    setStatus(versionBtn.title);
-    await checkVersion();
-    setStatus(versionBtn.title);
-    versionStatusTimer = setTimeout(() => statusEl.textContent === versionBtn.title && setStatus(""), 4000);
-    return;
-  }
-  clearTimeout(versionStatusTimer);
-  if (statusEl.textContent === versionBtn.title) setStatus("");
-  setVersionState("updating");
-  // Fetch every shell file past the HTTP cache. The requests go through the service
-  // worker (network-first), which also stores the fresh copies in its shell cache, so
-  // the reload can't pick up stale ones. registration.update() picks up a new sw.js.
-  const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration().catch(() => null) : null;
-  await Promise.all([
-    reg ? reg.update().catch(() => {}) : null,
-    ...APP_FILES.map((f) => fetch(f, { cache: "reload" }).catch(() => {})),
-  ]);
-  location.reload();
-});
-
-setVersionState("checking");
-checkVersion();
-setInterval(checkVersion, VERSION_CHECK_MS);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) checkVersion();
-});
-window.addEventListener("online", checkVersion);
+import("https://cdn.jsdelivr.net/gh/alexknight0/pages-common@1.0.0/update.js")
+  .then(({ initUpdateLight }) => initUpdateLight({
+    version: VERSION,
+    buttons: "#version",
+    serviceWorker: true,
+    report(text) {
+      clearTimeout(versionStatusTimer);
+      setStatus(text);
+      versionStatusTimer = setTimeout(() => statusEl.textContent === text && setStatus(""), 4000);
+    },
+    beforeUpdate() {
+      clearTimeout(versionStatusTimer);
+      if (statusEl.textContent === $("#version").title) setStatus("");
+    },
+  }))
+  .catch((e) => {
+    console.warn("update light:", e);
+    for (const b of document.querySelectorAll(".version")) {
+      b.dataset.state = "unknown";
+      b.title = "Couldn't load the update check (offline?).";
+    }
+  });

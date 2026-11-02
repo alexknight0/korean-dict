@@ -4,6 +4,8 @@
 const SHELL = "shell-v1";
 const DATA = "data";
 const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "data.js", "deinflect.js", "version.js", "manifest.webmanifest", "icons/icon.svg"];
+// The update light shared by Alex's sites: a pinned release, so its content never changes.
+const LIB_PREFIX = "https://cdn.jsdelivr.net/gh/alexknight0/pages-common@";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)));
@@ -21,6 +23,20 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  if (e.request.method === "GET" && url.href.startsWith(LIB_PREFIX)) {
+    // Cache-first, so the update light also loads offline.
+    e.respondWith(
+      (async () => {
+        const cache = await caches.open(SHELL);
+        const hit = await cache.match(e.request);
+        if (hit) return hit;
+        const res = await fetch(e.request);
+        if (res.ok) cache.put(e.request, res.clone());
+        return res;
+      })()
+    );
+    return;
+  }
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
 
   if (url.pathname.includes("/data/") && url.searchParams.has("v") && !url.pathname.endsWith("meta.json")) {
@@ -50,6 +66,8 @@ self.addEventListener("fetch", (e) => {
         }
         return res;
       } catch (err) {
+        // The update check (version.js?t=…) must fail offline, not get the cached copy.
+        if (url.pathname.endsWith("/version.js") && url.searchParams.has("t")) throw err;
         const hit = await caches.match(e.request, { ignoreSearch: true });
         if (hit) return hit;
         throw err;

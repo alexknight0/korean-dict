@@ -1,3 +1,4 @@
-// Set automatically by tools/pre-commit on every commit. app.js compares this (the copy
-// that's running) with the live file on GitHub Pages to show whether an update is available.
-const VERSION = "2026-11-02T00:24:44Z";
+// Set automatically by the pre-commit hook (~/projects/pages-common) on every commit.
+// update.js compares these with the live file on GitHub Pages to show whether an update is available.
+const VERSION = "2026-11-02T09:02:43Z";
+const VERSION_FILES = {"app.js": "4b616751bc50b7b7cab2b3981c86aac99cdc842e2b45da7375b5220ec2627880", "data.js": "376202d7cfbfe414b1a3b5a6af127a2a76a135f5ce294389d28621e97eae992b", "deinflect.js": "dad9905eee6bfbe749f84a07b0eda5f3826e2a26036115511797005b84126c0b", "index.html": "db61b02133e1477e9f691f92cd2142284b2b106c8d591fa8fbf82003c141d12f", "manifest.webmanifest": "6230851d7ea53e0b3d1de8d2bd2212d6af3ac918cc160adcb7f0a43f0ab8394e", "style.css": "47936e4a8dca22e527c5b1ffe2bba7c31f4e3a278b1dbe11bed1c42a655e8a04", "sw.js": "21546979337743994f8ae50cf224a9ca48878e9d3efce5a8d5f5b2dd88f08b3f"};
