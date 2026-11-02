@@ -161,7 +161,9 @@ def feats(el):
     """Direct <feat att=.. val=..> children as a dict of lists."""
     d = {}
     for f in el.findall("feat"):
-        d.setdefault(f.get("att"), []).append(f.get("val"))
+        # krdict values are entity-escaped twice (&amp;quot;), so unescape once more.
+        val = f.get("val")
+        d.setdefault(f.get("att"), []).append(html.unescape(val) if val else val)
     return d
 
 
