@@ -754,3 +754,37 @@ body.idle::before {
   display: block; margin: 18px 0 0 auto; padding: 8px 18px; border: 0; border-radius: 8px;
   background: var(--bar); color: #fbfaf7; font: inherit; font-weight: 600; cursor: pointer;
 }
+
+/* the entry's word wherever it appears in body text (same look as 우리말샘's marked examples) */
+mark.hl {
+  background: none;
+  color: var(--mark);
+  font-weight: 600;
+}
+
+/* Ask AI: two option rows, then the answers */
+.ai-options .ai + .ai ul.results li button.row {
+  border-top: 0;
+}
+.ai-def {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px 14px 10px;
+}
+.ai-def h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.ai-def h3 .pos {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.ai-def .ai-origin {
+  color: var(--muted);
+}
+.ai-def .ai-origin b {
+  color: var(--fg);
+  font-weight: 600;
+}

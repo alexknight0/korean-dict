@@ -27,9 +27,13 @@ const app = initializeApp(firebaseConfig, "korean-dict");
 const auth = initializeAuth(app, { persistence: browserLocalPersistence, popupRedirectResolver: browserPopupRedirectResolver });
 const db = getFirestore(app);
 
-// Same models as the extension: fast flash-lite ones; on a quota (429) or missing
-// model (404) try the next.
-const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite"];
+// Fast flash-lite models. On a quota (429), missing model (404), overload (5xx) or a
+// reply slower than MODEL_TIMEOUT_MS, try the next. 3.1 first: on 2026-11-04,
+// gemini-3.5-flash-lite (the extension's first choice) took 20-30 s per reply while
+// 3.1 took 1-3 s with equally good answers (~/.tmp/korean-dict-ai/define-variants.mjs).
+const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+const MODEL_TIMEOUT_MS = 15000; // the last model gets LAST_MODEL_TIMEOUT_MS
+const LAST_MODEL_TIMEOUT_MS = 60000;
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
 const SUGGESTION_LIMIT = 5;
 const CACHE_KEY = "korean-dict-ai"; // localStorage {query: {suggestions, model, at}}
@@ -79,14 +83,17 @@ function readCache() {
   }
 }
 
-/** A previous answer for this query, or null. */
-export function cached(query) {
-  return readCache()[query.trim()] || null;
+/** A previous answer for this query and mode ("spell" | "define"), or null. */
+export function cached(query, mode = "spell") {
+  return readCache()[cacheKey(query, mode)] || null;
 }
 
-function store(query, answer) {
+// Spelling answers keep the plain query as key (cached before modes existed).
+const cacheKey = (query, mode) => (mode === "spell" ? query.trim() : mode + ":" + query.trim());
+
+function store(key, answer) {
   const cache = readCache();
-  cache[query] = { ...answer, at: Date.now() };
+  cache[key] = { ...answer, at: Date.now() };
   const keys = Object.keys(cache);
   if (keys.length > CACHE_MAX) {
     keys.sort((a, b) => cache[a].at - cache[b].at);
@@ -95,8 +102,11 @@ function store(query, answer) {
   localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
 }
 
+const isLatin = (query) => /^[a-z\s'.,-]+$/i.test(query);
+
+/** "Did I misspell it?": the dictionary words that were probably meant. */
 export function prompt(query) {
-  const latin = /^[a-z\s'.,-]+$/i.test(query);
+  const latin = isLatin(query);
   return [
     "I'm an English speaker learning Korean. I searched my Korean–English dictionary for this and it found nothing:",
     `"${query}"`,
@@ -117,6 +127,31 @@ export function prompt(query) {
   ].join("\n");
 }
 
+/** "Define it": the word is right but not in the dictionary (slang, new words, names...). */
+export function definePrompt(query) {
+  return [
+    "I'm an English speaker learning Korean. My Korean–English dictionary has no entry for this, and I believe it is " +
+      "spelled correctly:",
+    `"${query}"`,
+    "",
+    "It may be slang, internet language, a new word, an abbreviation, a loanword, a dialect word, a proper noun, " +
+      "a set phrase, or a conjugated form of a word." +
+      (isLatin(query) ? " It may also be Korean typed in romanisation." : ""),
+    "",
+    "If you know it as something Korean speakers actually say or write, explain it:",
+    "- word: the form it is usually written in, in Hangul (verbs and adjectives in their 다 form)",
+    "- pos: its part of speech in English (e.g. noun, verb, expression)",
+    "- meaning: its meaning in plain English, under 60 words; mention the register (slang, formal, dated...) " +
+      "and any other meanings",
+    "- examples: 3 natural example sentences that use it, each with an English translation",
+    "- origin: where it comes from, under 50 words (hanja with their meanings, the source language of a loanword, " +
+      "what an abbreviation is short for, how the slang arose). If you are unsure of the origin, say so.",
+    "",
+    "Do not invent a meaning. If you don't recognise it as a real word or expression, set known to false and " +
+      "leave the other fields empty.",
+  ].join("\n");
+}
+
 const SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -132,42 +167,100 @@ const SCHEMA = {
   required: ["suggestions"],
 };
 
-/** Gemini's guesses for a query: {suggestions: [{word, meaning, note?}], model}. */
-export async function suggest(query, key) {
-  query = query.trim();
-  const hit = cached(query);
-  if (hit) return hit;
+const DEFINE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    known: { type: "BOOLEAN" },
+    word: { type: "STRING" },
+    pos: { type: "STRING" },
+    meaning: { type: "STRING" },
+    examples: {
+      type: "ARRAY",
+      items: { type: "OBJECT", properties: { ko: { type: "STRING" }, en: { type: "STRING" } }, required: ["ko", "en"] },
+    },
+    origin: { type: "STRING" },
+  },
+  required: ["word", "known"],
+  // word before known: asked for "known" first, the model often answered false for real slang.
+  propertyOrdering: ["word", "known", "pos", "meaning", "examples", "origin"],
+};
+
+/** Gemini's JSON reply for a prompt: {data, model}. Falls through the models (see
+    GEMINI_MODELS); onRetry(message) is called before each fallback. */
+async function generate(text, schema, key, onRetry = () => {}) {
   let lastError = null;
-  for (const model of GEMINI_MODELS) {
-    const res = await fetch(`${GEMINI_URL}${model}:generateContent`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt(query) }] }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA },
-      }),
-    });
+  for (const [i, model] of GEMINI_MODELS.entries()) {
+    if (lastError) onRetry("Gemini is busy, trying another model…");
+    const timeout = i === GEMINI_MODELS.length - 1 ? LAST_MODEL_TIMEOUT_MS : MODEL_TIMEOUT_MS;
+    let res;
+    try {
+      res = await fetch(`${GEMINI_URL}${model}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text }] }],
+          // The token cap stops the occasional reply that repeats itself until it is cut off.
+          generationConfig: { responseMimeType: "application/json", responseSchema: schema, maxOutputTokens: 1500, temperature: 0.3 },
+        }),
+        signal: AbortSignal.timeout(timeout),
+      });
+    } catch (err) {
+      if (err.name !== "TimeoutError") throw new Error("Couldn't reach Gemini (offline?)");
+      lastError = `${model} took longer than ${timeout / 1000} s`;
+      console.warn("Gemini", lastError);
+      continue;
+    }
     const body = await res.json().catch(() => ({}));
     if (res.ok) {
-      const text = (body.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
-      let suggestions;
+      const reply = (body.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
       try {
-        suggestions = JSON.parse(text).suggestions;
+        return { data: JSON.parse(reply), model };
       } catch {
-        throw new Error(`Gemini gave no answer (${body.candidates?.[0]?.finishReason || "unreadable reply"})`);
+        lastError = `${model} gave no answer (${body.candidates?.[0]?.finishReason || "unreadable reply"})`;
+        console.warn("Gemini", lastError);
+        continue;
       }
-      const answer = {
-        suggestions: (suggestions || []).filter((s) => s && s.word).slice(0, SUGGESTION_LIMIT),
-        model,
-      };
-      store(query, answer);
-      return answer;
     }
     const message = body.error?.message || `HTTP ${res.status}`;
     if (/api key/i.test(message) || res.status === 401 || res.status === 403) throw new BadKeyError(message);
     lastError = `${model}: ${message}`;
     console.warn("Gemini", lastError);
-    if (res.status !== 429 && res.status !== 404) break; // other models won't help
+    if (res.status !== 429 && res.status !== 404 && res.status < 500) break; // other models won't help
   }
-  throw new Error(lastError);
+  throw new Error(/busy|demand|longer than/i.test(lastError) ? "Gemini is overloaded right now. Try again in a minute." : lastError);
+}
+
+/** Gemini's guesses for a query: {suggestions: [{word, meaning, note?}], model}. */
+export async function suggest(query, key, onRetry) {
+  query = query.trim();
+  const hit = cached(query, "spell");
+  if (hit) return hit;
+  const { data, model } = await generate(prompt(query), SCHEMA, key, onRetry);
+  const answer = {
+    suggestions: (data.suggestions || []).filter((s) => s && s.word).slice(0, SUGGESTION_LIMIT),
+    model,
+  };
+  store(cacheKey(query, "spell"), answer);
+  return answer;
+}
+
+/** Gemini's explanation of a word the dictionary lacks:
+    {known, word?, pos?, meaning?, examples: [{ko, en?}], origin?, model}. */
+export async function define(query, key, onRetry) {
+  query = query.trim();
+  const hit = cached(query, "define");
+  if (hit) return hit;
+  const { data, model } = await generate(definePrompt(query), DEFINE_SCHEMA, key, onRetry);
+  const clean = (s) => (typeof s === "string" ? s.trim() : "");
+  const answer = {
+    known: data.known === true && !!clean(data.meaning),
+    word: clean(data.word) || query,
+    pos: clean(data.pos),
+    meaning: clean(data.meaning),
+    examples: (data.examples || []).filter((x) => x && clean(x.ko)).map((x) => ({ ko: clean(x.ko), en: clean(x.en) })),
+    origin: clean(data.origin),
+    model,
+  };
+  store(cacheKey(query, "define"), answer);
+  return answer;
 }

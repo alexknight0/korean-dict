@@ -146,6 +146,8 @@ def main():
         assert page.locator(".source.kr .en").count() > 0
         assert page.locator(".source.od details.word").count() > 0
         assert page.locator(".source.od ul.ex b").count() > 0
+        hl = page.locator("mark.hl").all_inner_texts()
+        assert {"먹다", "먹고"} <= set(hl) and not {"먹이", "먹"} & set(hl), sorted(set(hl))[:20]  # the word in body text
         assert page.locator("#credit").is_visible() and not page.locator("#credit p").is_visible()
         box = page.locator("header").bounding_box()
         assert abs(box["y"] + box["height"] - 844) < 2, box  # entry page: bar back at the bottom

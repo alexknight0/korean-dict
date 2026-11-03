@@ -271,12 +271,21 @@ async function search(q) {
 }
 
 // ------------------------------------------------------------------ Ask AI
-// A search with no results ends with an "Ask AI" row: Gemini guesses the word that was
-// meant (ai.js). The first tap signs in with Google and, if the account has no Gemini
-// key yet, asks for one; the key is saved to the account and reused after that.
+// A search with no results ends with two "Ask AI" rows (ai.js, Gemini):
+//   spell:  "did I misspell it?" -> the dictionary words probably meant
+//   define: "define it" -> meaning, example sentences and origin of a word the
+//           dictionary doesn't have (slang, new words); Gemini says so instead of
+//           inventing a meaning when it doesn't know the word.
+// The first tap signs in with Google and, if the account has no Gemini key yet, asks
+// for one; the key is saved to the account and reused after that.
+
+const AI_MODES = {
+  spell: { title: "✦ Ask AI: did I misspell it?", hint: "Find the word you meant (typos, misremembered spelling)" },
+  define: { title: "✦ Ask AI: define it", hint: "For words this dictionary doesn't have (slang, new words): meaning, examples, origin" },
+};
 
 let aiModule = null;
-/** ai.js and the Firebase SDK, loaded once. Started when the row is shown, so a tap can
+/** ai.js and the Firebase SDK, loaded once. Started when the rows are shown, so a tap can
     open the sign-in popup straight away (browsers block popups that open too late). */
 function loadAI() {
   aiModule ||= import("./ai.js").catch((err) => {
@@ -287,20 +296,26 @@ function loadAI() {
 }
 
 function aiBlock(query) {
-  const box = el("div", { class: "ai" });
-  showAskRow(box, query);
-  // An earlier answer for the same text (e.g. after going back from a suggestion).
+  const boxes = Object.keys(AI_MODES).map((mode) => {
+    const box = el("div", { class: "ai ai-" + mode });
+    showAskRow(box, query, mode);
+    return [box, mode];
+  });
+  // Earlier answers for the same text (e.g. after going back from a suggestion).
   loadAI()
     .then((ai) => {
-      const hit = ai.cached(query);
-      if (hit && box.isConnected) showSuggestions(box, query, hit);
+      for (const [box, mode] of boxes) {
+        const hit = ai.cached(query, mode);
+        if (hit && box.isConnected) showAnswer(box, query, mode, hit);
+      }
     })
     .catch(() => {});
-  return box;
+  return el("div", { class: "ai-options" }, boxes.map(([box]) => box));
 }
 
-function showAskRow(box, query) {
-  setChildren(box,
+function showAskRow(box, query, mode) {
+  setChildren(
+    box,
     el(
       "ul",
       { class: "results" },
@@ -309,9 +324,9 @@ function showAskRow(box, query) {
         null,
         el(
           "button",
-          { type: "button", class: "row ask-ai", onclick: () => askAI(box, query) },
-          el("span", { class: "hw" }, "✦ Ask AI"),
-          el("span", { class: "gloss" }, "Find the word you meant (typos, misremembered spelling)")
+          { type: "button", class: "row ask-ai", onclick: () => askAI(box, query, mode) },
+          el("span", { class: "hw" }, AI_MODES[mode].title),
+          el("span", { class: "gloss" }, AI_MODES[mode].hint)
         )
       )
     )
@@ -322,7 +337,11 @@ function aiBusy(box, text) {
   setChildren(box, el("p", { class: "hint ai-busy" }, el("span", { class: "spinner" }), text));
 }
 
-async function askAI(box, query) {
+function showAnswer(box, query, mode, answer) {
+  return mode === "define" ? showDefinition(box, query, answer) : showSuggestions(box, query, answer);
+}
+
+async function askAI(box, query, mode) {
   let user = null;
   try {
     const ai = await loadAI();
@@ -333,27 +352,30 @@ async function askAI(box, query) {
     }
     aiBusy(box, "Asking Gemini…");
     const key = await ai.getKey(user);
-    if (!key) return keyForm(box, query, user);
-    showSuggestions(box, query, await ai.suggest(query, key));
+    if (!key) return keyForm(box, query, mode, user);
+    const onRetry = (text) => box.isConnected && aiBusy(box, text);
+    const answer = mode === "define" ? await ai.define(query, key, onRetry) : await ai.suggest(query, key, onRetry);
+    if (box.isConnected) showAnswer(box, query, mode, answer);
   } catch (err) {
     if (!box.isConnected) return;
     const code = err.code || "";
-    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return showAskRow(box, query);
-    if (err.name === "BadKeyError") return keyForm(box, query, user, "Gemini didn't accept the key: " + err.message);
+    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return showAskRow(box, query, mode);
+    if (err.name === "BadKeyError") return keyForm(box, query, mode, user, "Gemini didn't accept the key: " + err.message);
     const message =
       code === "permission-denied"
         ? "AI lookups only work with the site owner's Google account."
         : code === "auth/popup-blocked"
           ? "The sign-in popup was blocked. Allow popups for this site and try again."
           : "AI lookup failed: " + err.message;
-    setChildren(box,
-      el("p", { class: "error" }, message, " ", el("button", { class: "link", type: "button", onclick: () => askAI(box, query) }, "Try again"))
+    setChildren(
+      box,
+      el("p", { class: "error" }, message, " ", el("button", { class: "link", type: "button", onclick: () => askAI(box, query, mode) }, "Try again"))
     );
   }
 }
 
 /** Asks for a Gemini API key, saves it to the account, then asks Gemini. */
-function keyForm(box, query, user, problem) {
+function keyForm(box, query, mode, user, problem) {
   const field = el("input", {
     type: "text",
     class: "ai-key",
@@ -375,28 +397,56 @@ function keyForm(box, query, user, problem) {
         try {
           await (await loadAI()).saveKey(user, key);
         } catch (err) {
-          return keyForm(box, query, user, "Couldn't save the key: " + err.message);
+          return keyForm(box, query, mode, user, "Couldn't save the key: " + err.message);
         }
-        askAI(box, query);
+        askAI(box, query, mode);
       },
     },
     field,
     el("button", { type: "submit", class: "btn" }, "Save")
   );
-  setChildren(box,
-    ...[
-      problem ? el("p", { class: "error" }, problem) : null,
-      el(
-        "p",
-        { class: "hint ai-key-hint" },
-        "Paste a Gemini API key (free from ",
-        el("a", { href: "https://aistudio.google.com/apikey", target: "_blank", rel: "noopener" }, "Google AI Studio"),
-        "). It's saved to your Google account, so you only need to do this once."
-      ),
-      form,
-    ].filter(Boolean)
+  setChildren(
+    box,
+    problem ? el("p", { class: "error" }, problem) : null,
+    el(
+      "p",
+      { class: "hint ai-key-hint" },
+      "Paste a Gemini API key (free from ",
+      el("a", { href: "https://aistudio.google.com/apikey", target: "_blank", rel: "noopener" }, "Google AI Studio"),
+      "). It's saved to your Google account, so you only need to do this once."
+    ),
+    form
   );
   field.focus();
+}
+
+/** "Define it" answer: meaning, examples (word highlighted) and origin, or Gemini's "don't know". */
+async function showDefinition(box, query, d) {
+  if (!d.known) {
+    setChildren(
+      box,
+      el("h2", null, "AI definition"),
+      el("p", { class: "hint ai-unknown" }, `Gemini doesn't know ‘${query}’ as a Korean word or expression, so it didn't make up a meaning.`)
+    );
+    return;
+  }
+  const key = Dict.toKey(d.word);
+  const row = await Dict.row(key).catch(() => null);
+  if (!box.isConnected) return;
+  const inDict = row && shownRow(row) && key !== Dict.toKey(query);
+  const card = el(
+    "div",
+    { class: "ai-def" },
+    el("h3", null, d.word, d.pos ? el("span", { class: "pos" }, d.pos) : null),
+    inDict ? el("p", { class: "note" }, "In this dictionary as ", wordLink(row[1], row[0])) : null,
+    el("p", { class: "en", lang: "en" }, d.meaning),
+    d.examples.length
+      ? el("ul", { class: "ex" }, d.examples.map((x) => el("li", null, el("span", { class: "ko" }, x.ko), x.en ? el("span", { class: "tr" }, " → " + x.en) : null)))
+      : null,
+    d.origin ? el("p", { class: "ai-origin" }, el("b", null, "Origin: "), d.origin) : null
+  );
+  setChildren(box, el("h2", null, "AI definition"), card, el("p", { class: "ai-credit" }, "Written by Gemini (" + d.model + "); it can be wrong."));
+  highlightWord(card.querySelector("ul.ex"), [key, Dict.toKey(query)], d.word).catch(() => {});
 }
 
 async function showSuggestions(box, query, { suggestions, model }) {
@@ -436,6 +486,82 @@ async function showSuggestions(box, query, { suggestions, model }) {
     items.length ? el("ul", { class: "results ai-results" }, items) : el("p", { class: "hint" }, "Gemini had no suggestions."),
     el("p", { class: "ai-credit" }, "Guesses by Gemini (" + model + "); they can be wrong.")
   );
+}
+
+// ------------------------------------------------------------------ highlighting
+// The page's word is highlighted wherever it appears in Korean body text: definitions,
+// examples, notes (먹다 -> 먹고, 먹어도; 춥다 -> 추운, 추워지다; 공부 -> 공부를). 우리말샘
+// examples already mark it with {braces} (<b>), which are left as they are.
+
+const HL_SKIP = "a, b, mark, button, h1, h2, h3, summary .hw, sup, .pron, .orig, .level, .tag, .pos, .ko-name, .ext, .src, .hanja";
+const HANGUL_RUN = /[\uac00-\ud7a3]+/g;
+const initial = (ch) => Math.floor((ch.charCodeAt(0) - 0xac00) / 588); // 초성 of a syllable
+
+/** Wraps occurrences of the word in <mark class="hl"> inside root. keys: the page key(s);
+    display: the headword as written (phrases with spaces are matched as written). */
+async function highlightWord(root, keys, display) {
+  if (!root) return;
+  keys = [...new Set(keys.filter(Boolean))];
+  const nodes = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (/[\uac00-\ud7a3]/.test(n.data) && !n.parentElement.closest(HL_SKIP) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+  });
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  if (!nodes.length) return;
+
+  // Each match: [node, start, length, form]; form = the conjugated text, checked below.
+  const matches = [];
+  const phrase = display && /\s/.test(display.trim()) ? display.trim() : null;
+  for (const node of nodes) {
+    if (phrase) {
+      for (let i = node.data.indexOf(phrase); i >= 0; i = node.data.indexOf(phrase, i + phrase.length)) matches.push([node, i, phrase.length, null]);
+      continue;
+    }
+    for (const m of node.data.matchAll(HANGUL_RUN)) {
+      const len = matchLength(m[0], keys);
+      if (len) matches.push([node, m.index, len[0], len[1]]);
+    }
+  }
+  // A conjugation guess that is itself a learner word is that word instead (가게 "shop",
+  // not 가다 + 게), so skip it. Only forms that start like the headword can be such a word
+  // (갔지, 추운 can't), which also saves fetching index files for 갔, 추...
+  const forms = [...new Set(matches.map((m) => m[3]).filter((f) => f && keys.some((k) => f[0] === k[0])))];
+  const words = new Set();
+  await Promise.all(
+    forms.map(async (f) => {
+      const r = await Dict.row(f).catch(() => null);
+      if (r && r.length > 3) words.add(f);
+    })
+  );
+  if (!root.isConnected) return;
+  // Wrap from the end of each node so earlier offsets stay valid.
+  for (const [node, start, length] of matches.filter((m) => !words.has(m[3])).reverse()) {
+    const word = node.splitText(start);
+    word.splitText(length);
+    const mark = el("mark", { class: "hl" });
+    word.replaceWith(mark);
+    mark.append(word);
+  }
+}
+
+/** How much of a Hangul run is the word: [length, form?] or null. form is set when the
+    match relies on a conjugation guess (it over-generates; see highlightWord). */
+function matchLength(run, keys) {
+  for (const key of keys) {
+    const verb = key.length > 1 && key.endsWith("다");
+    if (!verb && key.length === 1) {
+      // One syllable (가, 눈): only on its own or with a particle, not inside other words.
+      if (run === key || Deinflect.candidates(run).includes(key)) return [key.length, null];
+      continue;
+    }
+    if (run.startsWith(key)) return [key.length, null]; // noun + particle: just the noun
+    if (!verb || initial(run) !== initial(key)) continue;
+    for (let len = run.length; len >= 1; len--) {
+      const form = run.slice(0, len);
+      if (Deinflect.candidates(form).includes(key)) return [len, form];
+    }
+  }
+  return null;
 }
 
 // ------------------------------------------------------------------ entry page
@@ -865,6 +991,7 @@ async function showEntry(key) {
       readerGroup("for-ko", "For Korean readers", "한국어 풀이", [odShown && od.length ? odSection(od, key, kr.length > 0) : null])
     );
     window.scrollTo(0, 0);
+    highlightWord(entryEl, [key], display).catch((err) => console.warn("highlight:", err));
     const r = await Dict.row(key).catch(() => null);
     remember(key, display, r ? r[2] : "");
   } catch (err) {
