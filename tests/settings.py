@@ -193,6 +193,22 @@ def main():
         page.click("#results ul.results li a >> nth=0")
         page.wait_for_selector("#entry h1")
         assert not page.evaluate("document.body.classList.contains('keep-gap')")  # entry page: no gap
+        # A results page opened directly (reload, Update button, back from an entry) has
+        # the gap and shortcuts at once, so tapping the box later moves nothing.
+        page.go_back()
+        page.wait_for_selector("#gap-bar.has-ai .ai-chip")
+        assert abs(page.locator("#results ul.results li").first.bounding_box()["y"] - y1) < 1
+        page.reload()
+        page.wait_for_selector("#gap-bar.has-ai .ai-chip")
+        assert page.locator("#gap-bar .ai-chip").first.is_visible()
+        y4 = page.locator("#results ul.results li").first.bounding_box()["y"]
+        assert abs(y4 - y1) < 1, (y1, y4)
+        page.focus("#q")
+        page.wait_for_timeout(100)
+        assert abs(page.locator("#results ul.results li").first.bounding_box()["y"] - y1) < 1
+        page.keyboard.press("Enter")
+        page.click("#results ul.results li a >> nth=0")
+        page.wait_for_selector("#entry h1")
         assert page.evaluate("JSON.parse(localStorage.getItem('korean-dict-settings')).bottomBar") is True
         print(f"5/5 bar top by default; bottom-bar setting: list stays at y={y1:.0f} when the bar drops and returns")
 

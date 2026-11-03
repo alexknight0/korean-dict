@@ -1065,7 +1065,10 @@ async function showHanja(ch) {
 function route() {
   const hash = location.hash.slice(1);
   const params = new URLSearchParams(hash);
-  if (!params.has("q")) document.body.classList.remove("keep-gap"); // other pages start at the top anyway
+  // Results pages always keep the top bar's room while the bar is at the bottom (also when
+  // opened directly, e.g. after a reload or Update, so tapping the box moves nothing);
+  // other pages start at the top anyway.
+  if (!params.has("q")) document.body.classList.remove("keep-gap");
   if (params.has("h")) {
     const ch = Array.from(params.get("h"))[0];
     if (ch) showHanja(ch);
@@ -1077,7 +1080,8 @@ function route() {
     const q = params.get("q");
     if (input.value !== q) input.value = q;
     document.title = "사전";
-    search(q);
+    search(q); // shows #results synchronously, so keepGap can check it
+    if (document.activeElement !== input) keepGap();
   } else {
     input.value = "";
     document.title = "사전";
@@ -1176,8 +1180,15 @@ function moveBar() {
 /** Bottom bar over a results list: keep the room the top bar takes (see updateBar). */
 function keepGap() {
   if (!settings.bottomBar || resultsEl.hidden) return;
-  document.body.style.setProperty("--bar-h", $("header").offsetHeight + "px");
-  document.body.classList.add("keep-gap");
+  const body = document.body;
+  // The height the bar has at the top. If it is at the bottom now (e.g. a results page
+  // opened by a reload or the Update button), measure it as if at the top: the class
+  // change and measurement happen in one task, so nothing is painted in between.
+  const atBottom = !body.classList.contains("searching");
+  if (atBottom) body.classList.add("searching");
+  body.style.setProperty("--bar-h", $("header").offsetHeight + "px");
+  if (atBottom) body.classList.remove("searching");
+  body.classList.add("keep-gap");
 }
 
 // The on-screen keyboard, seen through the visual viewport: it shrinks when the
