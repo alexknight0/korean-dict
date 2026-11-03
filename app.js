@@ -192,7 +192,9 @@ function showList(...nodes) {
   $("#credit").hidden = true; // attribution only on entry pages
   setChildren(resultsEl, ...nodes);
   // The Ask AI shortcuts at the top only make sense when the list has an Ask AI section.
-  $("#gap-bar").classList.toggle("has-ai", !!resultsEl.querySelector(".ai-options"));
+  const ai = resultsEl.querySelector(".ai-options");
+  $("#gap-bar").classList.toggle("has-ai", !!ai);
+  if (ai) for (const chip of document.querySelectorAll(".ai-chip")) setChildren(chip, ...aiLabel(chip.dataset.mode, ai.dataset.query));
 }
 
 function showHome() {
@@ -285,9 +287,16 @@ async function search(q) {
 // for one; the key is saved to the account and reused after that.
 
 const AI_MODES = {
-  spell: { title: "✦ Did I misspell it?", hint: "Find the word you meant (typos, misremembered spelling)" },
-  define: { title: "✦ Define it", hint: "For words this dictionary doesn't have (slang, new words): meaning, examples, origin" },
+  spell: { title: ["Check ", " spelling"], hint: "Find the word you meant (typos, misremembered spelling)" },
+  define: { title: ["Define ", ""], hint: "For words this dictionary doesn't have (slang, new words): meaning, examples, origin" },
 };
+
+/** "✦ Check 사랑 spelling": the query in its own span, so a long one is cut short (…)
+    rather than the words around it. */
+function aiLabel(mode, query) {
+  const [before, after] = AI_MODES[mode].title;
+  return [el("span", null, "✦ " + before), el("span", { class: "ai-q" }, query), after ? el("span", null, after) : null];
+}
 
 let aiModule = null;
 /** ai.js and the Firebase SDK (~300 KB), loaded once: on the first press of an Ask AI row
@@ -317,7 +326,7 @@ function aiCached(query, mode) {
 function aiSection(query) {
   return el(
     "div",
-    { class: "ai-options" },
+    { class: "ai-options", "data-query": query.trim() },
     el("h2", null, "Ask AI"),
     Object.keys(AI_MODES).map((mode) => {
       const box = el("div", { class: "ai ai-" + mode });
@@ -341,7 +350,7 @@ function showAskRow(box, query, mode) {
         el(
           "button",
           { type: "button", class: "row ask-ai", onpointerdown: () => loadAI().catch(() => {}), onclick: () => askAI(box, query, mode) },
-          el("span", { class: "ai-title" }, AI_MODES[mode].title),
+          el("span", { class: "ai-title" }, ...aiLabel(mode, query.trim())),
           el("span", { class: "gloss" }, AI_MODES[mode].hint)
         )
       )
@@ -359,6 +368,9 @@ function showAnswer(box, query, mode, answer) {
 
 async function askAI(box, query, mode) {
   let user = null;
+  // Straight away, so the box shows (its row is hidden while a shortcut at the top
+  // stands in for it) and a shortcut can scroll to it.
+  aiBusy(box, "Loading…");
   try {
     const ai = await loadAI();
     user = await ai.currentUser();
@@ -1258,7 +1270,6 @@ window.addEventListener("popstate", routeOnce);
 // section and scroll down to it.
 for (const chip of document.querySelectorAll(".ai-chip")) {
   const mode = chip.dataset.mode;
-  chip.textContent = AI_MODES[mode].title;
   chip.addEventListener("pointerdown", () => loadAI().catch(() => {}));
   chip.addEventListener("click", () => {
     const box = resultsEl.querySelector(".ai-" + mode);

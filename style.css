@@ -84,6 +84,12 @@ header {
   body.bottom-bar.keep-gap:not(.searching) #gap-bar {
     display: flex;
   }
+  /* An Ask AI row with a shortcut at the top isn't repeated in the list (its answer
+     still appears there), nor the heading while neither option has been used. */
+  body.bottom-bar.keep-gap:not(.searching) #gap-bar.has-ai ~ #results .ai:has(.ask-ai),
+  body.bottom-bar.keep-gap:not(.searching) #gap-bar.has-ai ~ #results .ai-options:has(.ai-spell .ask-ai):has(.ai-define .ask-ai) > h2 {
+    display: none;
+  }
 }
 #gap-bar {
   display: none;
@@ -93,6 +99,8 @@ header {
   align-items: center;
 }
 .ai-chip {
+  display: flex;
+  justify-content: center;
   flex: 1;
   min-width: 0;
   padding: 9px 10px;
@@ -110,6 +118,18 @@ header {
 }
 #gap-bar:not(.has-ai) .ai-chip {
   visibility: hidden; /* keep the room, no shortcuts (e.g. over the recent list) */
+}
+/* "✦ Check " / " spelling" keep their edge spaces and size; a long query is cut (…). */
+.ai-chip > span {
+  flex-shrink: 0;
+  white-space: pre;
+}
+.ai-chip > .ai-q {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ai-chip:active {
   border-color: var(--accent);

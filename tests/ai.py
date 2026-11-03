@@ -129,7 +129,7 @@ def main():
         page.wait_for_selector(".ask-ai")
         assert "No results." in page.locator("#results").inner_text()
         rows = page.locator("#results .ask-ai .ai-title").all_inner_texts()
-        assert rows == ["✦ Did I misspell it?", "✦ Define it"], rows
+        assert rows == ["✦ Check 먹엇다 spelling", "✦ Define 먹엇다"], rows
         assert page.get_attribute("#q", "placeholder") == "Search (English / Korean)"
         page.wait_for_load_state("networkidle")
         assert not page.evaluate("performance.getEntriesByType('resource').some(r => r.name.includes('firebase'))")
