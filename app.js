@@ -65,6 +65,32 @@ const en = (term) => EN[term] || term;
 const label = (cls, term) =>
   el("span", { class: cls, title: EN[term] && EN[term] !== term ? term : null, lang: EN[term] ? "en" : "ko" }, en(term));
 
+// ------------------------------------------------------------------ settings
+// localStorage "korean-dict-settings" (Settings dialog, gear button in the search bar).
+// koreanOnly, off by default: also use 우리말샘, the dictionary written for Korean
+// readers. While off, entry pages show only the "For English readers" group and the
+// search results / hanja word lists only list words in 기초사전.
+const SETTINGS_KEY = "korean-dict-settings";
+const DEFAULT_SETTINGS = { koreanOnly: false };
+
+function loadSettings() {
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+let settings = loadSettings();
+
+function saveSetting(name, value) {
+  settings = { ...settings, [name]: value };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+const showOd = () => settings.koreanOnly;
+// Index rows have a 4th element (the level, maybe "") only for words in 기초사전.
+const shownRow = (r) => showOd() || r.length > 3;
+
 // ------------------------------------------------------------------ DOM helpers
 
 /** el("a", {href: "#"}, "text", child, ...) - children are text or nodes; falsy skipped. */
@@ -186,7 +212,7 @@ async function search(q) {
   const key = Dict.toKey(query);
   try {
     if (isLatin) {
-      const rows = await Dict.english(query);
+      const rows = await Dict.english(query, !showOd());
       if (token !== searchToken) return;
       if (rows.length) showList(el("ul", { class: "results" }, rows.map((r) => resultItem(r.key, r.disp, r.en))));
       else showList(el("p", { class: "hint" }, "No results."), aiBlock(query));
@@ -194,16 +220,17 @@ async function search(q) {
     }
 
     const hangul = /^[\uac00-\ud7a3]+$/.test(key);
-    const [rows, bases] = await Promise.all([
+    const [allRows, bases] = await Promise.all([
       Dict.prefixRows(key),
       hangul && key.length >= 2 ? Dict.baseForms(key) : [],
     ]);
     if (token !== searchToken) return;
 
+    const rows = allRows.filter(shownRow);
     const exact = rows.filter((r) => r[0] === key);
     const rest = rows.filter((r) => r[0] !== key).slice(0, RESULT_LIMIT);
     const shown = new Set(rows.map((r) => r[0]));
-    const baseRows = bases.filter((b) => !shown.has(b.row[0]));
+    const baseRows = bases.filter((b) => !shown.has(b.row[0]) && shownRow(b.row));
 
     const parts = [];
     if (baseRows.length) {
@@ -365,8 +392,9 @@ async function showSuggestions(box, query, { suggestions, model }) {
       const key = Dict.toKey(s.word);
       try {
         const row = await Dict.row(key);
-        if (row) return row;
-        const [base] = /^[\uac00-\ud7a3]{2,}$/.test(key) ? await Dict.baseForms(key) : [];
+        if (row && shownRow(row)) return row;
+        const bases = /^[\uac00-\ud7a3]{2,}$/.test(key) ? await Dict.baseForms(key) : [];
+        const base = bases.find((b) => shownRow(b.row));
         return base ? base.row : null;
       } catch {
         return null;
@@ -627,7 +655,7 @@ function hanjaItems(page, key) {
     const s = (e.senses || [])[0];
     add(e.origin, e.w, s && s.en && s.en[0] ? s.en[0][0] : null);
   }
-  for (const w of page.od || []) {
+  for (const w of showOd() ? page.od || [] : []) {
     const text = typeof w.orig === "string" ? w.orig : (w.orig || []).map(([, o]) => o).join("");
     const tl = w.senses.flatMap((s) => s.tl || []).find(([lang]) => lang === "영어");
     add(text, w.w || key, tl ? tl[1] : null);
@@ -789,19 +817,36 @@ async function showEntry(key) {
     }
     const kr = page.kr || [];
     const od = page.od || [];
+    const odShown = showOd();
     const display = kr.length ? kr[0].w : od[0].w || key;
     document.title = display + " - 사전";
     if (document.activeElement !== input) input.value = display;
+    const naver = el("p", { class: "ext" }, "Naver: ", extLink(NAVER.en(display), "English"), " · ", extLink(NAVER.ko(display), "국어사전"));
+    if (!kr.length && !odShown) {
+      // Reached by a link or a recent lookup while 우리말샘 is hidden.
+      entryEl.replaceChildren(
+        el("h1", null, display),
+        naver,
+        el(
+          "p",
+          { class: "hint od-hidden" },
+          `‘${display}’ is only in ${OD_NAME} (우리말샘), a dictionary for Korean readers. `,
+          el("button", { class: "link", type: "button", onclick: () => setKoreanOnly(true) }, "Show Korean-only dictionaries")
+        )
+      );
+      window.scrollTo(0, 0);
+      return;
+    }
     entryEl.replaceChildren(
       el("h1", null, display),
-      el("p", { class: "ext" }, "Naver: ", extLink(NAVER.en(display), "English"), " · ", extLink(NAVER.ko(display), "국어사전")),
+      naver,
       // 기초사전 is written for learners (English equivalents); 우리말샘 for native speakers.
       readerGroup("for-en", "For English readers", "영어 풀이", [
-        rootSection(page, display),
+        odShown ? rootSection(page, display) : null,
         kr.length ? krSection(kr) : null,
         hanjaSection(page, key),
       ]),
-      readerGroup("for-ko", "For Korean readers", "한국어 풀이", [od.length ? odSection(od, key, kr.length > 0) : null])
+      readerGroup("for-ko", "For Korean readers", "한국어 풀이", [odShown && od.length ? odSection(od, key, kr.length > 0) : null])
     );
     window.scrollTo(0, 0);
     const r = await Dict.row(key).catch(() => null);
@@ -829,7 +874,9 @@ async function showHanja(ch) {
     const [info, words] = await Promise.all([Dict.hanja([ch]), Dict.hanjaWords(ch)]);
     setStatus("");
     const [readings, def] = info[ch] || ["", ""];
-    const rows = words ? words.r : [];
+    // Without 우리말샘: only 기초사전 spellings (rows with a 5th element), counted by k.
+    const rows = words ? words.r.filter((r) => showOd() || r.length > 4) : [];
+    const total = !words ? 0 : showOd() ? words.n : words.k ?? rows.length;
     entryEl.replaceChildren(
       el(
         "div",
@@ -841,8 +888,8 @@ async function showHanja(ch) {
       el(
         "h2",
         null,
-        words ? `${words.n.toLocaleString()} ${words.n === 1 ? "word" : "words"} using ${ch}` : `No words using ${ch}`,
-        words && words.n > rows.length ? el("span", { class: "ko-name" }, `top ${rows.length} shown`) : null
+        total ? `${total.toLocaleString()} ${total === 1 ? "word" : "words"} using ${ch}` : `No words using ${ch}`,
+        total > rows.length ? el("span", { class: "ko-name" }, `top ${rows.length} shown`) : null
       ),
       rows.length
         ? el("ul", { class: "results hanja-words" }, rows.map(([key, disp, spelling, gloss, level]) => resultItem(key, disp, gloss, level, spelling)))
@@ -995,6 +1042,27 @@ function routeOnce() {
 }
 window.addEventListener("hashchange", routeOnce);
 window.addEventListener("popstate", routeOnce);
+
+// ------------------------------------------------------------------ settings dialog
+
+const settingsDialog = $("#settings");
+const koreanOnlyBox = $("#set-korean-only");
+
+/** Saves the setting and redraws the current page with it. */
+function setKoreanOnly(on) {
+  saveSetting("koreanOnly", on);
+  koreanOnlyBox.checked = on;
+  lastRouted = null;
+  routeOnce();
+}
+
+$("#settings-btn").addEventListener("click", () => {
+  koreanOnlyBox.checked = showOd();
+  settingsDialog.showModal();
+});
+koreanOnlyBox.addEventListener("change", () => setKoreanOnly(koreanOnlyBox.checked));
+// A tap on the backdrop (outside the box) closes it too.
+settingsDialog.addEventListener("click", (e) => e.target === settingsDialog && settingsDialog.close());
 
 Dict.init().catch(() => {});
 routeOnce();

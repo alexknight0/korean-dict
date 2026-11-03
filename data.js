@@ -61,6 +61,7 @@ const Dict = (() => {
 
   /**
    * Index rows [key, display, gloss, level?] whose key starts with `q`, best first.
+   * level is present ("" if none) only for words in 기초사전.
    * Walks the prefix files down as far as needed (see build_prefix_index).
    */
   async function prefixRows(q) {
@@ -112,8 +113,8 @@ const Dict = (() => {
     return out.sort((a, b) => a.order - b.order);
   }
 
-  /** English -> Korean: [{en, row: [key, display]}] */
-  async function english(q) {
+  /** English -> Korean: [{en, key, disp}]. krOnly: skip English from 우리말샘 translations. */
+  async function english(q, krOnly = false) {
     const tokens = (q.toLowerCase().match(/[a-z]+/g) || []).filter(
       (t) => t.length >= 2 && !EN_STOPWORDS.has(t)
     );
@@ -122,7 +123,8 @@ const Dict = (() => {
     const rows = (await load(`en/${longest.slice(0, 3)}.json.gz`)) || [];
     const needle = q.toLowerCase().trim();
     const scored = [];
-    for (const [en, key, disp] of rows) {
+    for (const [en, key, disp, fromOd] of rows) {
+      if (krOnly && fromOd) continue;
       const words = en.toLowerCase().match(/[a-z]+/g) || [];
       if (!tokens.every((t) => words.some((w) => w.startsWith(t)))) continue;
       const lower = en.toLowerCase();
@@ -151,7 +153,8 @@ const Dict = (() => {
     return Object.assign({}, ...files.filter(Boolean));
   }
 
-  /** Words written with a hanja: {n: total, r: [[key, display, spelling, gloss, level?], ...]} or null. */
+  /** Words written with a hanja: {n: total, k: total from 기초사전, r: [[key, display, spelling, gloss, level?], ...]} or null.
+      level is present ("" if none) only for spellings from 기초사전. */
   async function hanjaWords(ch) {
     await init();
     return load(`hw/${ch.codePointAt(0).toString(16)}.json.gz`);

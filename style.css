@@ -728,3 +728,29 @@ body.idle::before {
 .home-link:hover, .home-link:focus-visible { opacity: 1; }
 @media (pointer: coarse) { .home-link { padding: 9px; margin: -5px; } }
 .home-link svg { width: 20px; height: 20px; display: block; }
+
+/* Settings: gear at the end of the search bar, opens a modal dialog */
+.icon-btn {
+  display: inline-flex; align-items: center; flex: none; padding: 4px; border: 0; border-radius: 6px;
+  background: none; color: #fbfaf7; opacity: 0.75; cursor: pointer;
+}
+.icon-btn:hover, .icon-btn:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .icon-btn { padding: 9px; margin: -5px; } }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#settings {
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--fg);
+}
+#settings::backdrop { background: rgba(0, 0, 0, 0.55); }
+#settings h2 { margin: 0 0 14px; font-size: 1.1rem; color: var(--fg); }
+.setting { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.setting input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.setting small { display: block; margin-top: 4px; color: var(--muted); font-size: 0.85rem; line-height: 1.4; }
+#settings .btn {
+  display: block; margin: 18px 0 0 auto; padding: 8px 18px; border: 0; border-radius: 8px;
+  background: var(--bar); color: #fbfaf7; font: inherit; font-weight: 600; cursor: pointer;
+}

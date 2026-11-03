@@ -409,7 +409,8 @@ def build_english(pages, rank_of, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     for bucket, d in rows.items():
         r = sorted(d.values(), key=lambda x: x[3])
-        write_json(os.path.join(out_dir, bucket + ".json.gz"), [x[:3] for x in r])
+        # [en, key, display] from 기초사전; [en, key, display, 1] from 우리말샘 translations
+        write_json(os.path.join(out_dir, bucket + ".json.gz"), [x[:3] if x[3] < 10_000_000 else x[:3] + [1] for x in r])
     print(f"english: {sum(len(d) for d in rows.values())} rows in {len(rows)} buckets")
 
 
@@ -508,22 +509,25 @@ def hanja_spellings(page, key):
 
 def build_hanja_words(pages, keys, out_dir):
     """Words written with each hanja -> hw/<codepoint hex>.json.gz, best first.
-    {"n": total, "r": [[key, display, spelling, gloss, level?], ...]} (top HANJA_WORDS_LIMIT)."""
+    {"n": total, "k": total from 기초사전, "r": [[key, display, spelling, gloss, level?], ...]}
+    (top HANJA_WORDS_LIMIT). level is present only when the spelling is from 기초사전
+    ("" without a learner level), so the client can hide 우리말샘-only rows."""
     by_char = collections.defaultdict(list)
     for rank, k in enumerate(keys):
         page = pages[k]
         disp = display(k, page)
         for spelling, gloss_, level, tier in hanja_spellings(page, k):
             row = [k, disp, spelling, gloss_]
-            if level in LEVEL_SCORE:
-                row.append(level[0])
+            if tier <= 1:  # a 기초사전 spelling
+                row.append(level[0] if level in LEVEL_SCORE else "")
             for ch in dict.fromkeys(HAN.findall(spelling)):
                 by_char[ch].append((tier, rank, row))
     os.makedirs(out_dir)
     for i, (ch, items) in enumerate(by_char.items(), 1):
         items.sort(key=lambda x: x[:2])  # stable: page order breaks ties
         rows = [row for _, _, row in items[:HANJA_WORDS_LIMIT]]
-        write_json(os.path.join(out_dir, f"{ord(ch):x}.json.gz"), {"n": len(items), "r": rows})
+        kr = sum(1 for tier, _, _ in items if tier <= 1)
+        write_json(os.path.join(out_dir, f"{ord(ch):x}.json.gz"), {"n": len(items), "k": kr, "r": rows})
         if i % 2000 == 0:
             print(f"hanja words {i}/{len(by_char)}")
     print(f"hanja words: {len(by_char)} files")
@@ -570,14 +574,16 @@ def main():
         if i % 1000 == 0:
             print(f"entry shards {i}/{len(shards)}")
 
-    # prefix index rows: [key, display, gloss, level?]
+    # prefix index rows: [key, display, gloss, level?]. The 4th element is present only on
+    # pages with a 기초사전 entry ("" when it has no learner level), so the client can hide
+    # 우리말샘-only words (setting "Show Korean-only dictionaries" off).
     rows = []
     for k in keys:
         page = pages[k]
         level = next((e["level"] for e in page["kr"] if e.get("level") in LEVEL_SCORE), None)
         row = [k, display(k, page), gloss(page)]
-        if level:
-            row.append(level[0])  # 초 / 중 / 고
+        if page["kr"]:
+            row.append(level[0] if level else "")  # 초 / 중 / 고
         rows.append(row)
     index_files = build_prefix_index(rows, os.path.join(args.out, "i"))
     n_alias = build_aliases(pages, os.path.join(args.out, "a"))
