@@ -309,7 +309,7 @@ ul.results li button.row {
   border-top: 1px solid var(--line);
   cursor: pointer;
 }
-.ask-ai .hw {
+.ask-ai .ai-title {
   color: var(--accent);
 }
 ul.results .why {
@@ -787,4 +787,17 @@ mark.hl {
 .ai-def .ai-origin b {
   color: var(--fg);
   font-weight: 600;
+}
+.ai-title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+.ai-sub {
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.ai-options .ai + .ai .ai-sub {
+  margin-top: 16px;
 }

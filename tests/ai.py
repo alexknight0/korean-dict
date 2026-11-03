@@ -108,24 +108,39 @@ def main():
 
         page.route("https://generativelanguage.googleapis.com/**", fake_gemini)
 
-        # 1. A search with results has no Ask AI row; one without has it last.
+        # 1. Every search ends with an "Ask AI" section (after Headwords etc.); the Firebase
+        # SDK only loads once a row is pressed.
         page.goto(base + "#q=먹")
-        page.wait_for_selector("#results ul.results li")
-        assert page.locator(".ask-ai").count() == 0
+        page.wait_for_selector("#results ul.results li a")
+        heads = page.locator("#results h2").all_inner_texts()
+        assert heads[-1] == "Ask AI", heads
+        assert page.locator("#results > *").last.locator(".ask-ai").count() == 2  # last in the list
+        page.goto(base + "#q=먹었는데")
+        page.wait_for_selector("ul.bases")
+        heads = page.locator("#results h2").all_inner_texts()
+        assert heads == ["Dictionary form", "Ask AI"], heads  # 먹었는데: no headwords start with it
+        page.goto(base + "#q=먹")
+        page.wait_for_selector("#results ul.results li a")
+        assert page.locator("#results h2").all_inner_texts() == ["Headwords", "Ask AI"]
+        page.goto(base + "#q=doctor")
+        page.wait_for_selector("#results ul.results li a")
+        assert page.locator("#results h2").all_inner_texts()[-1] == "Ask AI"
         page.goto(base + "#q=먹엇다")
         page.wait_for_selector(".ask-ai")
         assert "No results." in page.locator("#results").inner_text()
-        rows = page.locator("#results .ask-ai .hw").all_inner_texts()
-        assert rows == ["✦ Ask AI: did I misspell it?", "✦ Ask AI: define it"], rows
-        assert page.locator("#results > *").last.locator(".ask-ai").count() == 2  # last in the list
+        rows = page.locator("#results .ask-ai .ai-title").all_inner_texts()
+        assert rows == ["✦ Did I misspell it?", "✦ Define it"], rows
         assert page.get_attribute("#q", "placeholder") == "Search (English / Korean)"
+        page.wait_for_load_state("networkidle")
+        assert not page.evaluate("performance.getEntriesByType('resource').some(r => r.name.includes('firebase'))")
         page.screenshot(path="/tmp/korean-dict-ai-row.png")
-        print("1/8 Ask AI rows (misspelt / define) only when nothing is found")
+        print("1/8 Ask AI section last in every search; SDK not loaded until pressed")
 
         # 2. Closing the sign-in popup puts the row back.
         page.evaluate("sessionStorage.setItem('fake', JSON.stringify({closePopup: true}))")
         page.click(".ai-spell .ask-ai")
-        page.wait_for_selector(".ask-ai")
+        page.wait_for_function("() => JSON.parse(sessionStorage.getItem('fake') || '{}').signIns === 1")
+        page.wait_for_selector(".ai-spell .ask-ai")
         assert fake_state(page)["signIns"] == 1 and not gemini
         page.evaluate("sessionStorage.removeItem('fake')")
         print("2/8 cancelled sign-in -> row back")

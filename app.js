@@ -228,8 +228,10 @@ async function search(q) {
     if (isLatin) {
       const rows = await Dict.english(query, !showOd());
       if (token !== searchToken) return;
-      if (rows.length) showList(el("ul", { class: "results" }, rows.map((r) => resultItem(r.key, r.disp, r.en))));
-      else showList(el("p", { class: "hint" }, "No results."), aiBlock(query));
+      showList(
+        rows.length ? el("ul", { class: "results" }, rows.map((r) => resultItem(r.key, r.disp, r.en))) : el("p", { class: "hint" }, "No results."),
+        aiSection(query)
+      );
       return;
     }
 
@@ -258,12 +260,11 @@ async function search(q) {
       );
     }
     if (exact.length || rest.length) {
-      if (baseRows.length) parts.push(el("h2", null, "Headwords"));
+      parts.push(el("h2", null, "Headwords")); // always labelled: the Ask AI section follows
       parts.push(el("ul", { class: "results" }, [...exact, ...rest].map((r) => resultItem(r[0], r[1], r[2], r[3]))));
     }
-    if (!parts.length) {
-      parts.push(el("p", { class: "hint" }, "No results."), aiBlock(query));
-    }
+    if (!parts.length) parts.push(el("p", { class: "hint" }, "No results."));
+    parts.push(aiSection(query));
     showList(...parts);
   } catch (err) {
     if (token === searchToken) showList(el("p", { class: "error" }, "Failed to load: " + err.message));
@@ -271,7 +272,7 @@ async function search(q) {
 }
 
 // ------------------------------------------------------------------ Ask AI
-// A search with no results ends with two "Ask AI" rows (ai.js, Gemini):
+// Every search list ends with an "Ask AI" section of two rows (ai.js, Gemini):
 //   spell:  "did I misspell it?" -> the dictionary words probably meant
 //   define: "define it" -> meaning, example sentences and origin of a word the
 //           dictionary doesn't have (slang, new words); Gemini says so instead of
@@ -280,13 +281,14 @@ async function search(q) {
 // for one; the key is saved to the account and reused after that.
 
 const AI_MODES = {
-  spell: { title: "✦ Ask AI: did I misspell it?", hint: "Find the word you meant (typos, misremembered spelling)" },
-  define: { title: "✦ Ask AI: define it", hint: "For words this dictionary doesn't have (slang, new words): meaning, examples, origin" },
+  spell: { title: "✦ Did I misspell it?", hint: "Find the word you meant (typos, misremembered spelling)" },
+  define: { title: "✦ Define it", hint: "For words this dictionary doesn't have (slang, new words): meaning, examples, origin" },
 };
 
 let aiModule = null;
-/** ai.js and the Firebase SDK, loaded once. Started when the rows are shown, so a tap can
-    open the sign-in popup straight away (browsers block popups that open too late). */
+/** ai.js and the Firebase SDK (~300 KB), loaded once: on the first press of an Ask AI row
+    (pointerdown, slightly before the click), so ordinary searches never load them. The
+    sign-in popup still opens within the tap's user activation (Chrome allows ~5 s). */
 function loadAI() {
   aiModule ||= import("./ai.js").catch((err) => {
     aiModule = null;
@@ -295,22 +297,32 @@ function loadAI() {
   return aiModule;
 }
 
-function aiBlock(query) {
-  const boxes = Object.keys(AI_MODES).map((mode) => {
-    const box = el("div", { class: "ai ai-" + mode });
-    showAskRow(box, query, mode);
-    return [box, mode];
-  });
-  // Earlier answers for the same text (e.g. after going back from a suggestion).
-  loadAI()
-    .then((ai) => {
-      for (const [box, mode] of boxes) {
-        const hit = ai.cached(query, mode);
-        if (hit && box.isConnected) showAnswer(box, query, mode, hit);
-      }
+/** Earlier answer from ai.js's cache (localStorage, see cacheKey there), read without
+    loading ai.js. */
+function aiCached(query, mode) {
+  try {
+    const cache = JSON.parse(localStorage.getItem("korean-dict-ai") || "{}");
+    return cache[mode === "spell" ? query.trim() : mode + ":" + query.trim()] || null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Ask AI" heading + one box per mode; a box shows its earlier answer if there is one
+    (e.g. after going back from a suggestion), else its row. */
+function aiSection(query) {
+  return el(
+    "div",
+    { class: "ai-options" },
+    el("h2", null, "Ask AI"),
+    Object.keys(AI_MODES).map((mode) => {
+      const box = el("div", { class: "ai ai-" + mode });
+      const hit = aiCached(query, mode);
+      if (hit) showAnswer(box, query, mode, hit);
+      else showAskRow(box, query, mode);
+      return box;
     })
-    .catch(() => {});
-  return el("div", { class: "ai-options" }, boxes.map(([box]) => box));
+  );
 }
 
 function showAskRow(box, query, mode) {
@@ -324,8 +336,8 @@ function showAskRow(box, query, mode) {
         null,
         el(
           "button",
-          { type: "button", class: "row ask-ai", onclick: () => askAI(box, query, mode) },
-          el("span", { class: "hw" }, AI_MODES[mode].title),
+          { type: "button", class: "row ask-ai", onpointerdown: () => loadAI().catch(() => {}), onclick: () => askAI(box, query, mode) },
+          el("span", { class: "ai-title" }, AI_MODES[mode].title),
           el("span", { class: "gloss" }, AI_MODES[mode].hint)
         )
       )
@@ -425,7 +437,7 @@ async function showDefinition(box, query, d) {
   if (!d.known) {
     setChildren(
       box,
-      el("h2", null, "AI definition"),
+      el("p", { class: "ai-sub" }, "Definition"),
       el("p", { class: "hint ai-unknown" }, `Gemini doesn't know ‘${query}’ as a Korean word or expression, so it didn't make up a meaning.`)
     );
     return;
@@ -445,7 +457,7 @@ async function showDefinition(box, query, d) {
       : null,
     d.origin ? el("p", { class: "ai-origin" }, el("b", null, "Origin: "), d.origin) : null
   );
-  setChildren(box, el("h2", null, "AI definition"), card, el("p", { class: "ai-credit" }, "Written by Gemini (" + d.model + "); it can be wrong."));
+  setChildren(box, el("p", { class: "ai-sub" }, "Definition"), card, el("p", { class: "ai-credit" }, "Written by Gemini (" + d.model + "); it can be wrong."));
   highlightWord(card.querySelector("ul.ex"), [key, Dict.toKey(query)], d.word).catch(() => {});
 }
 
@@ -482,7 +494,7 @@ async function showSuggestions(box, query, { suggestions, model }) {
     return item;
   });
   setChildren(box,
-    el("h2", null, "AI suggestions"),
+    el("p", { class: "ai-sub" }, "Did you mean"),
     items.length ? el("ul", { class: "results ai-results" }, items) : el("p", { class: "hint" }, "Gemini had no suggestions."),
     el("p", { class: "ai-credit" }, "Guesses by Gemini (" + model + "); they can be wrong.")
   );
