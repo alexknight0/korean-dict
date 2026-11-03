@@ -191,6 +191,8 @@ function showList(...nodes) {
   document.body.classList.remove("idle");
   $("#credit").hidden = true; // attribution only on entry pages
   setChildren(resultsEl, ...nodes);
+  // The Ask AI shortcuts at the top only make sense when the list has an Ask AI section.
+  $("#gap-bar").classList.toggle("has-ai", !!resultsEl.querySelector(".ai-options"));
 }
 
 function showHome() {
@@ -1239,6 +1241,22 @@ function routeOnce() {
 }
 window.addEventListener("hashchange", routeOnce);
 window.addEventListener("popstate", routeOnce);
+
+// Ask AI shortcuts in the gap the bottom bar leaves at the top of a results list
+// (#gap-bar, shown by CSS with body.keep-gap): run that option of the list's Ask AI
+// section and scroll down to it.
+for (const chip of document.querySelectorAll(".ai-chip")) {
+  const mode = chip.dataset.mode;
+  chip.textContent = AI_MODES[mode].title;
+  chip.addEventListener("pointerdown", () => loadAI().catch(() => {}));
+  chip.addEventListener("click", () => {
+    const box = resultsEl.querySelector(".ai-" + mode);
+    if (!box) return;
+    const row = box.querySelector(".ask-ai");
+    if (row) row.click(); // else it already shows its answer
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
 
 // ------------------------------------------------------------------ settings dialog
 

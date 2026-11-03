@@ -78,11 +78,41 @@ header {
   body.bottom-bar main {
     padding-top: max(8px, env(safe-area-inset-top)); /* 8px = main's usual top padding */
   }
-  /* When the bar drops to the bottom over a results list, keep the room it used at the
-     top (body.keep-gap, --bar-h set by keepGap() in app.js) so the list doesn't jump up. */
-  body.bottom-bar.keep-gap:not(.searching) main {
-    padding-top: calc(var(--bar-h, 0px) + max(8px, env(safe-area-inset-top)));
+  /* When the bar drops to the bottom over a results list, the room it used at the top
+     is kept (body.keep-gap, --bar-h set by keepGap() in app.js) so the list doesn't jump
+     up, and filled with the Ask AI shortcuts. */
+  body.bottom-bar.keep-gap:not(.searching) #gap-bar {
+    display: flex;
   }
+}
+#gap-bar {
+  display: none;
+  box-sizing: border-box;
+  height: var(--bar-h, 0px);
+  gap: 8px;
+  align-items: center;
+}
+.ai-chip {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--accent-bg);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+#gap-bar:not(.has-ai) .ai-chip {
+  visibility: hidden; /* keep the room, no shortcuts (e.g. over the recent list) */
+}
+.ai-chip:active {
+  border-color: var(--accent);
 }
 
 /* Empty home: dim everything but the search bar (and the "Recent searches" hint). */

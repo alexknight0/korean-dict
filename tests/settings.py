@@ -145,9 +145,24 @@ def main():
         assert abs(box["y"] + box["height"] - 844) < 2, box
         y2 = page.locator("#results ul.results li").first.bounding_box()["y"]
         assert abs(y2 - y1) < 1, (y1, y2)  # the list didn't move
+        # the gap holds the two Ask AI shortcuts side by side
+        chips = page.locator("#gap-bar .ai-chip")
+        assert chips.all_inner_texts() == ["✦ Did I misspell it?", "✦ Define it"], chips.all_inner_texts()
+        b1, b2 = chips.nth(0).bounding_box(), chips.nth(1).bounding_box()
+        assert abs(b1["y"] - b2["y"]) < 1 and b1["x"] + b1["width"] <= b2["x"], (b1, b2)
+        page.screenshot(path="/tmp/korean-dict-gap-chips.png")
+        page.route("https://www.gstatic.com/**", lambda r: r.abort())  # no real sign-in from the test
+        chips.nth(1).click()
+        page.wait_for_function("() => !document.querySelector('.ai-define .ask-ai')")  # the define option started
+        page.wait_for_function("() => { const r = document.querySelector('.ai-define').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }")
+        page.unroute("https://www.gstatic.com/**")
+        errors[:] = [e for e in errors if "ERR_FAILED" not in e and "Failed to fetch dynamically imported module" not in e]
+        page.wait_for_timeout(800)  # let the smooth scroll finish
+        page.evaluate("scrollTo(0, 0)")
         page.focus("#q")
         page.wait_for_timeout(100)
-        assert abs(page.locator("#results ul.results li").first.bounding_box()["y"] - y1) < 1  # nor when it comes back up
+        y3 = page.locator("#results ul.results li").first.bounding_box()["y"]
+        assert abs(y3 - y1) < 1, (y1, y3, page.evaluate("[document.body.className, scrollY, document.activeElement.id]"))  # nor when it comes back up
         # Enter while the keyboard is open: the bar waits at the top until the keyboard has
         # closed (viewport back to full height), then moves in one step.
         page.set_viewport_size({"width": 390, "height": 500})  # keyboard opens
