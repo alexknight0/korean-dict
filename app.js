@@ -64,6 +64,8 @@ const en = (term) => EN[term] || term;
 /** Badge/label node: English text, Korean original in the tooltip. */
 const label = (cls, term) =>
   el("span", { class: cls, title: EN[term] && EN[term] !== term ? term : null, lang: EN[term] ? "en" : "ko" }, en(term));
+// "품사 없음" (no part of speech) is the dictionaries' placeholder for a missing value: not shown.
+const hasPos = (pos) => pos && pos !== "품사 없음" && pos !== "품사없음";
 
 // ------------------------------------------------------------------ settings
 // localStorage "korean-dict-settings" (Settings dialog, gear button in the search bar).
@@ -102,11 +104,23 @@ function el(tag, attrs, ...children) {
     else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
     else node.setAttribute(k, v === true ? "" : v);
   }
+  return appendParts(node, children);
+}
+
+/** Appends text/nodes (arrays are flattened), skipping missing parts (null, undefined, false, ""). */
+function appendParts(node, ...children) {
   for (const c of children.flat(Infinity)) {
     if (c == null || c === false || c === "") continue;
     node.append(c instanceof Node ? c : String(c));
   }
   return node;
+}
+
+/** node.replaceChildren(...) that skips missing parts like el() does, instead of
+    rendering them as the text "null". Use this, not replaceChildren/append. */
+function setChildren(node, ...children) {
+  node.replaceChildren();
+  return appendParts(node, children);
 }
 
 /** Example text with {headword} marked: returns nodes with <b> for the braces. */
@@ -174,7 +188,7 @@ const phone = window.matchMedia("(max-width: 640px)");
 function showList(...nodes) {
   document.body.classList.remove("idle");
   $("#credit").hidden = true; // attribution only on entry pages
-  resultsEl.replaceChildren(...nodes);
+  setChildren(resultsEl, ...nodes);
 }
 
 function showHome() {
@@ -286,7 +300,7 @@ function aiBlock(query) {
 }
 
 function showAskRow(box, query) {
-  box.replaceChildren(
+  setChildren(box,
     el(
       "ul",
       { class: "results" },
@@ -305,7 +319,7 @@ function showAskRow(box, query) {
 }
 
 function aiBusy(box, text) {
-  box.replaceChildren(el("p", { class: "hint ai-busy" }, el("span", { class: "spinner" }), text));
+  setChildren(box, el("p", { class: "hint ai-busy" }, el("span", { class: "spinner" }), text));
 }
 
 async function askAI(box, query) {
@@ -332,7 +346,7 @@ async function askAI(box, query) {
         : code === "auth/popup-blocked"
           ? "The sign-in popup was blocked. Allow popups for this site and try again."
           : "AI lookup failed: " + err.message;
-    box.replaceChildren(
+    setChildren(box,
       el("p", { class: "error" }, message, " ", el("button", { class: "link", type: "button", onclick: () => askAI(box, query) }, "Try again"))
     );
   }
@@ -369,7 +383,7 @@ function keyForm(box, query, user, problem) {
     field,
     el("button", { type: "submit", class: "btn" }, "Save")
   );
-  box.replaceChildren(
+  setChildren(box,
     ...[
       problem ? el("p", { class: "error" }, problem) : null,
       el(
@@ -409,7 +423,7 @@ async function showSuggestions(box, query, { suggestions, model }) {
       return el(
         "li",
         null,
-        el("div", { class: "row missing" }, el("span", { class: "hw" }, s.word), why, el("span", { class: "gloss" }, s.meaning + " · not in this dictionary"))
+        el("div", { class: "row missing" }, el("span", { class: "hw" }, s.word), why, el("span", { class: "gloss" }, [s.meaning, "not in this dictionary"].filter(Boolean).join(" · ")))
       );
     }
     const item = resultItem(r[0], r[1], r[2] || s.meaning, r[3]);
@@ -417,7 +431,7 @@ async function showSuggestions(box, query, { suggestions, model }) {
     if (why) link.insertBefore(why, link.querySelector(".gloss"));
     return item;
   });
-  box.replaceChildren(
+  setChildren(box,
     el("h2", null, "AI suggestions"),
     items.length ? el("ul", { class: "results ai-results" }, items) : el("p", { class: "hint" }, "Gemini had no suggestions."),
     el("p", { class: "ai-credit" }, "Guesses by Gemini (" + model + "); they can be wrong.")
@@ -498,9 +512,9 @@ function krSection(entries) {
         el(
           "p",
           { class: "meta" },
-          e.pos ? label("pos", e.pos) : null,
+          hasPos(e.pos) ? label("pos", e.pos) : null,
           e.unit && e.unit !== "단어" ? label("tag", e.unit) : null,
-          e.pron && e.pron.length ? el("span", { class: "pron" }, "[" + e.pron.join("/") + "]") : null,
+          e.pron && e.pron.some(Boolean) ? el("span", { class: "pron" }, "[" + e.pron.filter(Boolean).join("/") + "]") : null,
           playButton(e.sound),
           e.origin ? el("span", { class: "orig" }, e.origin) : null
         ),
@@ -530,16 +544,18 @@ function krSection(entries) {
 }
 
 function krExamples(ex) {
-  const phrases = ex.filter(([t]) => t === "구").map(([, lines]) => lines.join(" "));
-  const others = ex.filter(([t]) => t !== "구");
+  // A few examples have empty lines; drop them rather than show "/ /".
+  const text = (lines) => (lines || []).filter(Boolean);
+  const phrases = ex.filter(([t]) => t === "구").map(([, lines]) => text(lines).join(" ")).filter(Boolean);
+  const others = ex.filter(([t, lines]) => t !== "구" && text(lines).length);
   return el(
     "ul",
     { class: "ex" },
     phrases.length ? el("li", { class: "phrases" }, phrases.join(" / ")) : null,
     others.map(([type, lines]) =>
       type === "대화"
-        ? el("li", { class: "dialog" }, lines.map((l, i) => el("span", null, (i % 2 ? "B: " : "A: ") + l)))
-        : el("li", null, lines.join(" "))
+        ? el("li", { class: "dialog" }, text(lines).map((l, i) => el("span", null, (i % 2 ? "B: " : "A: ") + l)))
+        : el("li", null, text(lines).join(" "))
     )
   );
 }
@@ -592,7 +608,7 @@ function odWord(w, i, count, key, open) {
   const orig =
     typeof w.orig === "string"
       ? w.orig
-      : (w.orig || []).map(([type, o]) => (type === "한자" || type === "고유어" ? o : `${o} (${en(type)})`)).join(" + ");
+      : (w.orig || []).filter(([, o]) => o).map(([type, o]) => (type === "한자" || type === "고유어" ? o : `${o} (${en(type)})`)).join(" + ");
   // group consecutive senses by part of speech
   const groups = [];
   for (const s of w.senses) {
@@ -617,12 +633,12 @@ function odWord(w, i, count, key, open) {
     el(
       "p",
       { class: "meta" },
-      w.pron && w.pron.length ? el("span", { class: "pron" }, "[" + w.pron.join("/") + "]") : null,
+      w.pron && w.pron.some(Boolean) ? el("span", { class: "pron" }, "[" + w.pron.filter(Boolean).join("/") + "]") : null,
       w.conj && w.conj.length ? el("span", { class: "conj" }, "Conjugation: " + [...w.conj, ...(w.abbr || [])].join(", ")) : null,
       w.origin ? el("span", { class: "orig" }, "Etymology: " + w.origin) : null
     ),
     groups.map((g) =>
-      el("div", { class: "pos-group" }, el("p", { class: "pos", title: EN[g.pos] ? g.pos : null }, en(g.pos)), el("ol", { class: "senses" }, g.senses.map(odSense)))
+      el("div", { class: "pos-group" }, hasPos(g.pos) ? el("p", { class: "pos", title: EN[g.pos] ? g.pos : null }, en(g.pos)) : null, el("ol", { class: "senses" }, g.senses.map(odSense)))
     )
   );
 }
@@ -712,9 +728,9 @@ function hanjaSection(page, key) {
     .then((table) => {
       const rows = items.map((it) => hanjaRow(it, table)).filter(Boolean);
       if (!rows.length) return drop();
-      section.append(...rows.slice(0, HANJA_SHOWN));
+      appendParts(section, ...rows.slice(0, HANJA_SHOWN));
       if (rows.length > HANJA_SHOWN) {
-        section.append(el("details", { class: "more-hanja" }, el("summary", null, `${rows.length - HANJA_SHOWN} more`), rows.slice(HANJA_SHOWN)));
+        appendParts(section, el("details", { class: "more-hanja" }, el("summary", null, `${rows.length - HANJA_SHOWN} more`), rows.slice(HANJA_SHOWN)));
       }
     })
     .catch(drop);
@@ -755,17 +771,17 @@ function rootCard(target) {
       if (!page) return;
       const kr = page.kr || [];
       const level = kr.map((e) => e.level).find((l) => l && LEVEL[l[0]]);
-      if (level) card.firstChild.append(el("span", { class: "level level-" + level[0], title: level }, LEVEL[level[0]]));
+      if (level) appendParts(card.firstChild, el("span", { class: "level level-" + level[0], title: level }, LEVEL[level[0]]));
       const en = kr.flatMap((e) => (e.senses || []).flatMap((s) => s.en || []));
       if (en.length) {
-        card.append(...en.map(([lemma, def]) => el("p", { class: "en", lang: "en" }, el("b", null, lemma), def ? " — " + def : null)));
+        appendParts(card, ...en.map(([lemma, def]) => el("p", { class: "en", lang: "en" }, el("b", null, lemma), def ? " — " + def : null)));
         return;
       }
       const senses = (page.od || []).flatMap((w) => w.senses);
       const tl = senses.flatMap((s) => s.tl || []).filter(([lang]) => lang === "영어").map(([, t]) => t);
-      if (tl.length) card.append(el("p", { class: "en", lang: "en" }, tl.join("; ")));
+      if (tl.length) appendParts(card, el("p", { class: "en", lang: "en" }, tl.join("; ")));
       const def = senses.find((s) => s.def && !ROOT_DEF.test(s.def));
-      if (def) card.append(el("p", { class: "def" }, def.def));
+      if (def) appendParts(card, el("p", { class: "def" }, def.def));
     })
     .catch(() => {});
   return card;
@@ -804,13 +820,13 @@ async function showEntry(key) {
   ++searchToken; // cancel any pending search render
   resultsEl.hidden = true;
   entryEl.hidden = false;
-  entryEl.replaceChildren();
+  setChildren(entryEl);
   setStatus("Loading…");
   try {
     const page = await Dict.entry(key);
     setStatus("");
     if (!page) {
-      entryEl.replaceChildren(
+      setChildren(entryEl,
         el("p", { class: "hint" }, `No entry for ‘${key}’. `, el("a", { href: "#q=" + encodeURIComponent(key) }, "Search instead"))
       );
       return;
@@ -824,7 +840,7 @@ async function showEntry(key) {
     const naver = el("p", { class: "ext" }, "Naver: ", extLink(NAVER.en(display), "English"), " · ", extLink(NAVER.ko(display), "국어사전"));
     if (!kr.length && !odShown) {
       // Reached by a link or a recent lookup while 우리말샘 is hidden.
-      entryEl.replaceChildren(
+      setChildren(entryEl,
         el("h1", null, display),
         naver,
         el(
@@ -837,7 +853,7 @@ async function showEntry(key) {
       window.scrollTo(0, 0);
       return;
     }
-    entryEl.replaceChildren(
+    setChildren(entryEl,
       el("h1", null, display),
       naver,
       // 기초사전 is written for learners (English equivalents); 우리말샘 for native speakers.
@@ -866,7 +882,7 @@ async function showHanja(ch) {
   ++searchToken; // cancel any pending search render
   resultsEl.hidden = true;
   entryEl.hidden = false;
-  entryEl.replaceChildren();
+  setChildren(entryEl);
   document.title = ch + " - 사전";
   if (document.activeElement !== input) input.value = "";
   setStatus("Loading…");
@@ -877,7 +893,7 @@ async function showHanja(ch) {
     // Without 우리말샘: only 기초사전 spellings (rows with a 5th element), counted by k.
     const rows = words ? words.r.filter((r) => showOd() || r.length > 4) : [];
     const total = !words ? 0 : showOd() ? words.n : words.k ?? rows.length;
-    entryEl.replaceChildren(
+    setChildren(entryEl,
       el(
         "div",
         { class: "hanja-title" },
