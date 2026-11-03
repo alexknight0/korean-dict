@@ -147,7 +147,7 @@ def main():
         assert abs(y2 - y1) < 1, (y1, y2)  # the list didn't move
         # the gap holds the two Ask AI shortcuts side by side
         chips = page.locator("#gap-bar .ai-chip")
-        assert chips.all_text_contents() == ["✦ Check 먹 spelling", "✦ Define 먹"], chips.all_text_contents()
+        assert chips.all_text_contents() == ["✦ Spellcheck 먹", "✦ Define 먹"], chips.all_text_contents()
         b1, b2 = chips.nth(0).bounding_box(), chips.nth(1).bounding_box()
         assert abs(b1["y"] - b2["y"]) < 1 and b1["x"] + b1["width"] <= b2["x"], (b1, b2)
         # ...and the list doesn't repeat them (nor the Ask AI heading)
@@ -158,7 +158,7 @@ def main():
         assert page.locator(".ask-ai:visible").count() == 2
         page.keyboard.press("Enter")
         page.wait_for_timeout(200)
-        # a long query is cut short in the chip, keeping "Check" and "spelling"
+        # a long query is cut short in the chip, keeping "Spellcheck"
         page.evaluate("""() => { const q = document.querySelector('.ai-chip .ai-q'); q.dataset.was = q.textContent; q.textContent = '아주아주아주아주아주긴단어'; }""")
         assert page.evaluate("[...document.querySelector('.ai-chip').children].map(s => s.getBoundingClientRect().right <= document.querySelector('.ai-chip').getBoundingClientRect().right + 0.5).every(Boolean)")
         assert page.evaluate("document.querySelector('.ai-chip .ai-q').scrollWidth > document.querySelector('.ai-chip .ai-q').clientWidth")

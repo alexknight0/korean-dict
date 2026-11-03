@@ -287,11 +287,11 @@ async function search(q) {
 // for one; the key is saved to the account and reused after that.
 
 const AI_MODES = {
-  spell: { title: ["Check ", " spelling"], hint: "Find the word you meant (typos, misremembered spelling)" },
+  spell: { title: ["Spellcheck ", ""], hint: "Find the word you meant (typos, misremembered spelling)" },
   define: { title: ["Define ", ""], hint: "For words this dictionary doesn't have (slang, new words): meaning, examples, origin" },
 };
 
-/** "✦ Check 사랑 spelling": the query in its own span, so a long one is cut short (…)
+/** "✦ Spellcheck 사랑": the query in its own span, so a long one is cut short (…)
     rather than the words around it. */
 function aiLabel(mode, query) {
   const [before, after] = AI_MODES[mode].title;
