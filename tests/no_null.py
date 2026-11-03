@@ -21,8 +21,8 @@ from playwright.sync_api import sync_playwright
 
 PORT = 8769
 # Missing values shown as text, or placeholders around an empty value ("[/]", "/ /",
-# the 품사 없음 label).
-BAD = re.compile(r"\b(null|undefined|NaN)\b|\[object \w+\]|\[/*\]|/ +/|no part of speech|\(\)")
+# the 품사 없음 label). "null and void" is a real gloss (무효하다 on #h=無).
+BAD = re.compile(r"\b(null(?! and void)|undefined|NaN)\b|\[object \w+\]|\[/*\]|/ +/|no part of speech|\(\)")
 
 
 def serve():

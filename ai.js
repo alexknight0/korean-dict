@@ -36,6 +36,7 @@ const MODEL_TIMEOUT_MS = 15000; // the last model gets LAST_MODEL_TIMEOUT_MS
 const LAST_MODEL_TIMEOUT_MS = 60000;
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
 const SUGGESTION_LIMIT = 5;
+const FOUND_LIMIT = 10; // search results passed to the spelling prompt
 const CACHE_KEY = "korean-dict-ai"; // localStorage {query: {suggestions, model, at}}
 const CACHE_MAX = 100;
 
@@ -104,12 +105,22 @@ function store(key, answer) {
 
 const isLatin = (query) => /^[a-z\s'.,-]+$/i.test(query);
 
-/** "Did I misspell it?": the dictionary words that were probably meant. */
-export function prompt(query) {
+/** "Did I misspell it?": the dictionary words that were probably meant. `found` lists
+    the words the search itself showed, [{word, meaning}], so Gemini knows what the
+    dictionary already has for the query. */
+export function prompt(query, found = []) {
   const latin = isLatin(query);
+  const foundText = found
+    .slice(0, FOUND_LIMIT)
+    .map((f) => (f.meaning ? `${f.word} (${f.meaning})` : f.word))
+    .join(", ");
   return [
-    "I'm an English speaker learning Korean. I searched my Korean–English dictionary for this and it found nothing:",
+    found.length
+      ? "I'm an English speaker learning Korean. I searched my Korean–English dictionary for this, but it may not " +
+        "have found the word I wanted:"
+      : "I'm an English speaker learning Korean. I searched my Korean–English dictionary for this and it found nothing:",
     `"${query}"`,
+    found.length ? `It found these entries: ${foundText}.` : null,
     "",
     latin
       ? "It is probably an English word or phrase, which I may have misspelled: then suggest the Korean words that " +
@@ -120,11 +131,21 @@ export function prompt(query) {
         "a phrase, slang or a spoken contraction that the dictionary doesn't list.",
     "",
     `Suggest the Korean dictionary words I most likely meant, most likely first, at most ${SUGGESTION_LIMIT}. ` +
-      "Only suggest real words. For each give:",
+      "Only suggest real words.",
+    "Each suggestion links to the dictionary's page for that spelling, and one page covers every meaning of a " +
+      "spelling, so give each spelling at most once (never the same word twice with different meanings or parts " +
+      "of speech), with the meaning I most likely meant." +
+      (found.length
+        ? " Only include a word from the entries found above if what I typed is most likely right; otherwise " +
+          "suggest other words."
+        : ""),
+    "For each give:",
     "- word: the headword as a Korean dictionary lists it, in Hangul (verbs and adjectives in their 다 form)",
     "- meaning: a short English gloss",
     '- note: at most 6 words on how it relates to what I typed (e.g. "ㅔ, not ㅐ", "past tense", "romanised")',
-  ].join("\n");
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 }
 
 /** "Define it": the word is right but not in the dictionary (slang, new words, names...). */
@@ -230,14 +251,23 @@ async function generate(text, schema, key, onRetry = () => {}) {
   throw new Error(/busy|demand|longer than/i.test(lastError) ? "Gemini is overloaded right now. Try again in a minute." : lastError);
 }
 
-/** Gemini's guesses for a query: {suggestions: [{word, meaning, note?}], model}. */
-export async function suggest(query, key, onRetry) {
+/** Gemini's guesses for a query: {suggestions: [{word, meaning, note?}], model}.
+    `found`: the search's own results, see prompt(). */
+export async function suggest(query, key, onRetry, found = []) {
   query = query.trim();
   const hit = cached(query, "spell");
   if (hit) return hit;
-  const { data, model } = await generate(prompt(query), SCHEMA, key, onRetry);
+  const { data, model } = await generate(prompt(query, found), SCHEMA, key, onRetry);
+  // One per spelling: each links to the same page however Gemini glossed it.
+  const seen = new Set();
   const answer = {
-    suggestions: (data.suggestions || []).filter((s) => s && s.word).slice(0, SUGGESTION_LIMIT),
+    suggestions: (data.suggestions || [])
+      .filter((s) => s && typeof s.word === "string" && s.word.trim())
+      .filter((s) => {
+        const spelling = s.word.replace(/[\s^-]/g, "");
+        return !seen.has(spelling) && seen.add(spelling);
+      })
+      .slice(0, SUGGESTION_LIMIT),
     model,
   };
   store(cacheKey(query, "spell"), answer);

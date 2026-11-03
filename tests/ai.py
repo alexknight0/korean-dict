@@ -101,6 +101,8 @@ def main():
                 return route.fulfill(json={"candidates": [{"content": {"parts": [{"text": json.dumps(answer)}]}}]})
             answer = {"suggestions": [
                 {"word": "먹다", "meaning": "to eat", "note": "past tense"},
+                {"word": "먹다", "meaning": "to go deaf", "note": "same spelling again"},  # same page: dropped
+                {"word": "먹었다", "meaning": "ate", "note": "conjugated"},  # opens 먹다 too: dropped
                 {"word": "없는낱말", "meaning": "made up", "note": "test"},
             ]}
             page.wait_for_timeout(300)  # so the spinner can be seen
@@ -168,6 +170,8 @@ def main():
         assert gemini[-1][0] == "good" and '"먹엇다"' in gemini[-1][1] and "slightly wrong" in gemini[-1][1]
         link = page.locator('.ai-results a[href="#w=%EB%A8%B9%EB%8B%A4"]')
         assert link.count() == 1 and "past tense" in link.inner_text()
+        assert page.locator(".ai-results li").count() == 2  # one row per page: 먹다 + the missing word
+        assert "It found these entries" not in gemini[-1][1]  # nothing found for 먹엇다
         assert "not in this dictionary" in page.locator(".ai-results .missing").inner_text()
         assert "Gemini" in page.locator(".ai-credit").inner_text()
         page.screenshot(path="/tmp/korean-dict-ai-results.png")
@@ -194,7 +198,14 @@ def main():
         page.click(".ai-spell .ask-ai")
         page.wait_for_selector(".ai-results")
         assert "translate" in gemini[-1][1]  # English prompt variant
-        print("6/8 later taps reuse the account's key (Hangul and English queries)")
+        # the words the search found go into the prompt, so Gemini knows which pages exist
+        page.goto(base + "#q=시다")
+        page.wait_for_selector("#results ul.results li a")
+        page.click(".ai-spell .ask-ai")
+        page.wait_for_selector(".ai-results")
+        p = gemini[-1][1]
+        assert "It found these entries: 시다 (sour)" in p and "at most once" in p, p
+        print("6/8 later taps reuse the account's key (Hangul and English queries); found words in the prompt")
 
         # 7. Define it: meaning, examples with the word highlighted, origin; the first model's
         # 503 falls through to the next model.

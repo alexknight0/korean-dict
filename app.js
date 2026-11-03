@@ -366,6 +366,21 @@ function showAnswer(box, query, mode, answer) {
   return mode === "define" ? showDefinition(box, query, answer) : showSuggestions(box, query, answer);
 }
 
+/** The words the search list shows (Dictionary form + Headwords), [{word, meaning}],
+    for the spelling prompt: Gemini then knows which pages exist for the query. */
+function searchFound() {
+  const seen = new Set();
+  const found = [];
+  for (const a of resultsEl.querySelectorAll("ul.results li a")) {
+    if (a.closest(".ai-options")) continue;
+    const word = a.querySelector(".hw")?.textContent.trim();
+    if (!word || seen.has(word)) continue;
+    seen.add(word);
+    found.push({ word, meaning: a.querySelector(".gloss")?.textContent.trim() || "" });
+  }
+  return found;
+}
+
 async function askAI(box, query, mode) {
   let user = null;
   // Straight away, so the box shows (its row is hidden while a shortcut at the top
@@ -382,7 +397,7 @@ async function askAI(box, query, mode) {
     const key = await ai.getKey(user);
     if (!key) return keyForm(box, query, mode, user);
     const onRetry = (text) => box.isConnected && aiBusy(box, text);
-    const answer = mode === "define" ? await ai.define(query, key, onRetry) : await ai.suggest(query, key, onRetry);
+    const answer = mode === "define" ? await ai.define(query, key, onRetry) : await ai.suggest(query, key, onRetry, searchFound());
     if (box.isConnected) showAnswer(box, query, mode, answer);
   } catch (err) {
     if (!box.isConnected) return;
@@ -494,8 +509,14 @@ async function showSuggestions(box, query, { suggestions, model }) {
     })
   );
   if (!box.isConnected) return;
-  const items = suggestions.map((s, i) => {
+  // One row per page: different spellings (먹었다, 먹다) or one spelling glossed twice
+  // (시다 "sour" and 시다 "honorific of 이다") would open the same page.
+  const pages = new Set();
+  const items = suggestions.flatMap((s, i) => {
     const r = found[i];
+    const page = r ? r[0] : "?" + s.word;
+    if (pages.has(page)) return [];
+    pages.add(page);
     const why = s.note ? el("span", { class: "why" }, s.note) : null;
     if (!r) {
       return el(
