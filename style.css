@@ -57,11 +57,12 @@ header {
   border-bottom: 1px solid var(--bar);
   padding: max(10px, env(safe-area-inset-top)) 14px 10px;
 }
-/* Phones: the search bar rests at the bottom (thumb reach) and jumps to the top
-   while searching (body.searching: focused, or showing #q= results), so the
-   keyboard never covers it and results read top-down. */
+/* Phones with the "Search bar at the bottom" setting (body.bottom-bar): the bar rests at
+   the bottom (thumb reach) and jumps to the top while typing (body.searching), so the
+   keyboard never covers it and results read top-down. Without the setting it stays at
+   the top, as on desktop. */
 @media (max-width: 640px) {
-  body:not(.searching) header {
+  body.bottom-bar:not(.searching) header {
     position: fixed;
     top: auto;
     left: 0;
@@ -71,11 +72,16 @@ header {
     border-top: 1px solid var(--bar);
     padding: 8px 12px max(8px, env(safe-area-inset-bottom));
   }
-  body:not(.searching) {
+  body.bottom-bar:not(.searching) {
     padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
-  main {
+  body.bottom-bar main {
     padding-top: max(6px, env(safe-area-inset-top));
+  }
+  /* When the bar drops to the bottom over a results list, keep the room it used at the
+     top (body.keep-gap, --bar-h set by updateBar) so the list doesn't jump up. */
+  body.bottom-bar.keep-gap:not(.searching) main {
+    padding-top: calc(var(--bar-h, 0px) + max(6px, env(safe-area-inset-top)));
   }
 }
 
@@ -115,7 +121,7 @@ body.idle #q {
   margin: 4px 0;
 }
 @media (max-width: 640px) {
-  body:not(.searching) #credit {
+  body.bottom-bar:not(.searching) #credit {
     bottom: calc(70px + env(safe-area-inset-bottom));
   }
 }
@@ -605,7 +611,7 @@ a.src {
 /* Phones (search bar at the bottom): keep the current group's heading pinned at
    the top while scrolling through it. */
 @media (max-width: 640px) {
-  body:not(.searching) .group-h {
+  body.bottom-bar:not(.searching) .group-h {
     position: sticky;
     top: 0;
     z-index: 1;
@@ -799,5 +805,8 @@ mark.hl {
   font-size: 0.85rem;
 }
 .ai-options .ai + .ai .ai-sub {
+  margin-top: 16px;
+}
+.setting + .setting {
   margin-top: 16px;
 }

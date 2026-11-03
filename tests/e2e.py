@@ -43,9 +43,10 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 390, "height": 844})
-        # These checks cover 우리말샘 too, so turn on "Show Korean-only dictionaries"
-        # (default off; tests/settings.py covers the default).
-        page.add_init_script("localStorage.setItem('korean-dict-settings', JSON.stringify({koreanOnly: true}))")
+        # These checks cover 우리말샘 and the bottom search bar, so turn on "Show Korean-only
+        # dictionaries" and "Search bar at the bottom" (both off by default; tests/settings.py
+        # covers the defaults).
+        page.add_init_script("localStorage.setItem('korean-dict-settings', JSON.stringify({koreanOnly: true, bottomBar: true}))")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: m.type == "error" and errors.append(m.text))
         page.goto(base)

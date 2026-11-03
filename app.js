@@ -72,8 +72,10 @@ const hasPos = (pos) => pos && pos !== "품사 없음" && pos !== "품사없음"
 // koreanOnly, off by default: also use 우리말샘, the dictionary written for Korean
 // readers. While off, entry pages show only the "For English readers" group and the
 // search results / hanja word lists only list words in 기초사전.
+// bottomBar, off by default: on phones, the search bar rests at the bottom of the
+// screen (see updateBar). Alex relies on it; most people won't want it.
 const SETTINGS_KEY = "korean-dict-settings";
-const DEFAULT_SETTINGS = { koreanOnly: false };
+const DEFAULT_SETTINGS = { koreanOnly: false, bottomBar: false };
 
 function loadSettings() {
   try {
@@ -1061,6 +1063,7 @@ async function showHanja(ch) {
 function route() {
   const hash = location.hash.slice(1);
   const params = new URLSearchParams(hash);
+  if (!params.has("q")) document.body.classList.remove("keep-gap"); // other pages start at the top anyway
   if (params.has("h")) {
     const ch = Array.from(params.get("h"))[0];
     if (ch) showHanja(ch);
@@ -1153,10 +1156,20 @@ $("#home").addEventListener("click", () => {
   setTimeout(() => input.focus(), 0);
 });
 
-// Phones: the search bar sits at the bottom and moves to the top (CSS
-// body.searching) while the search box is focused, i.e. while typing.
+// Setting "Search bar at the bottom" (body.bottom-bar, phones only): the bar sits at the
+// bottom and moves to the top (CSS body.searching) while the search box is focused,
+// i.e. while typing. When it drops back down over a results list, body.keep-gap keeps
+// the room it took at the top, so the list doesn't jump up (Alex found the jump
+// jarring); the gap goes when the page changes or the box is focused again.
 function updateBar() {
-  document.body.classList.toggle("searching", document.activeElement === input);
+  const body = document.body;
+  const searching = document.activeElement === input;
+  if (body.classList.contains("searching") && !searching && settings.bottomBar && !resultsEl.hidden) {
+    body.style.setProperty("--bar-h", $("header").offsetHeight + "px");
+    body.classList.add("keep-gap");
+  }
+  if (searching) body.classList.remove("keep-gap");
+  body.classList.toggle("searching", searching);
 }
 input.addEventListener("focus", updateBar);
 input.addEventListener("blur", () => setTimeout(updateBar, 0));
@@ -1164,14 +1177,14 @@ input.addEventListener("blur", () => setTimeout(updateBar, 0));
 // Dismissing the on-screen keyboard (Android back/down button, iOS swipe) leaves
 // the box focused, so watch the visual viewport: it shrinks when the keyboard
 // opens and grows back when it closes. When it grows back, blur the box so the
-// bar returns to the bottom.
+// bar returns to the bottom (only with the bottom bar; at the top nothing moves).
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const KEYBOARD_MIN = 150; // px; smaller changes are browser toolbars, not a keyboard
   let fullHeight = vv.height; // viewport height without a keyboard
   let keyboardOpen = false;
   vv.addEventListener("resize", () => {
-    if (document.activeElement !== input) {
+    if (document.activeElement !== input || !settings.bottomBar) {
       fullHeight = vv.height; // rotation etc.
       keyboardOpen = false;
       return;
@@ -1211,8 +1224,18 @@ function setKoreanOnly(on) {
   routeOnce();
 }
 
+const bottomBarBox = $("#set-bottom-bar");
+const applyBottomBar = () => document.body.classList.toggle("bottom-bar", settings.bottomBar);
+applyBottomBar();
+bottomBarBox.addEventListener("change", () => {
+  saveSetting("bottomBar", bottomBarBox.checked);
+  document.body.classList.remove("keep-gap");
+  applyBottomBar();
+});
+
 $("#settings-btn").addEventListener("click", () => {
   koreanOnlyBox.checked = showOd();
+  bottomBarBox.checked = settings.bottomBar;
   settingsDialog.showModal();
 });
 koreanOnlyBox.addEventListener("change", () => setKoreanOnly(koreanOnlyBox.checked));

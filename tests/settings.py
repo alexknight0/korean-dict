@@ -66,7 +66,7 @@ def main():
         page.wait_for_selector("ul.hanja-words li")
         n_off = len(page.locator("ul.hanja-words li").all())
         head_off = page.inner_text("#entry h2")
-        print("1/4 default off:", r_off[:6], "| doctor:", en_off[:3], "|", head_off)
+        print("1/5 default off:", r_off[:6], "| doctor:", en_off[:3], "|", head_off)
 
         # 2. The gear opens Settings; ticking the box redraws the page with 우리말샘.
         page.goto(base + "#q=먹")
@@ -82,7 +82,7 @@ def main():
         r_on = hws(page)
         assert len(r_on) > len(r_off) and set(r_off) <= set(r_on), (r_off, r_on)
         assert page.evaluate("JSON.parse(localStorage.getItem('korean-dict-settings')).koreanOnly") is True
-        print("2/4 ticked:", len(r_off), "->", len(r_on), "results")
+        print("2/5 ticked:", len(r_off), "->", len(r_on), "results")
 
         # 3. On: the old behaviour (both reader groups, root page, every hanja word).
         page.reload()
@@ -94,7 +94,7 @@ def main():
         page.wait_for_selector("ul.hanja-words li")
         num = lambda h: int(h.split(" ")[0].replace(",", ""))
         assert num(page.inner_text("#entry h2")) > num(head_off), (page.inner_text("#entry h2"), head_off)
-        print("3/4 on after reload: 우리말샘 sections, root page, all hanja words |", page.inner_text("#entry h2"))
+        print("3/5 on after reload: 우리말샘 sections, root page, all hanja words |", page.inner_text("#entry h2"))
 
         # 4. The link on a hidden-only page turns the setting on; unticking and a backdrop tap work.
         page.evaluate("localStorage.setItem('korean-dict-settings', JSON.stringify({koreanOnly: false}))")
@@ -109,7 +109,48 @@ def main():
         page.wait_for_selector(".od-hidden")
         page.mouse.click(5, 5)  # backdrop
         assert not page.locator("#settings").is_visible()
-        print("4/4 'Show Korean-only dictionaries' link, untick, backdrop closes")
+        print("4/5 'Show Korean-only dictionaries' link, untick, backdrop closes")
+
+        # 5. Search bar position: top on phones by default; with "Search bar at the bottom"
+        # it rests at the bottom, and when it drops back down after typing the results
+        # stay where they were (no jump up).
+        page.evaluate("localStorage.removeItem('korean-dict-settings')")
+        page.goto(base + "#")
+        page.reload()
+        page.wait_for_selector("#settings-btn")
+        assert page.locator("header").bounding_box()["y"] == 0  # default: top
+        page.fill("#q", "먹")
+        page.wait_for_selector("#results ul.results li a")
+        y0 = page.locator("#results ul.results li").first.bounding_box()["y"]
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(200)
+        assert page.locator("header").bounding_box()["y"] == 0
+        assert page.locator("#results ul.results li").first.bounding_box()["y"] == y0
+        page.click("#settings-btn")
+        assert not page.is_checked("#set-bottom-bar")
+        page.check("#set-bottom-bar")
+        page.click("#settings .btn")
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 844) < 2, box  # now at the bottom
+        page.focus("#q")
+        page.wait_for_timeout(100)
+        assert page.locator("header").bounding_box()["y"] < 5  # top while typing
+        y1 = page.locator("#results ul.results li").first.bounding_box()["y"]
+        page.keyboard.press("Enter")  # blur: bar drops to the bottom
+        page.wait_for_timeout(200)
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 844) < 2, box
+        y2 = page.locator("#results ul.results li").first.bounding_box()["y"]
+        assert abs(y2 - y1) < 1, (y1, y2)  # the list didn't move
+        page.focus("#q")
+        page.wait_for_timeout(100)
+        assert abs(page.locator("#results ul.results li").first.bounding_box()["y"] - y1) < 1  # nor when it comes back up
+        page.keyboard.press("Enter")
+        page.click("#results ul.results li a >> nth=0")
+        page.wait_for_selector("#entry h1")
+        assert not page.evaluate("document.body.classList.contains('keep-gap')")  # entry page: no gap
+        assert page.evaluate("JSON.parse(localStorage.getItem('korean-dict-settings')).bottomBar") is True
+        print(f"5/5 bar top by default; bottom-bar setting: list stays at y={y1:.0f} when the bar drops and returns")
 
         browser.close()
     assert not errors, errors
