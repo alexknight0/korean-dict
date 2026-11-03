@@ -256,7 +256,8 @@ ul.results {
   margin: 0;
   padding: 0;
 }
-ul.results li a {
+ul.results li a,
+ul.results li .row {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -265,7 +266,8 @@ ul.results li a {
   border-bottom: 1px solid var(--line);
   color: var(--fg);
 }
-ul.results li a:hover {
+ul.results li a:hover,
+ul.results li button.row:hover {
   background: var(--accent-bg);
   text-decoration: none;
 }
@@ -294,6 +296,74 @@ ul.results .gloss {
 }
 ul.bases .hw {
   color: var(--accent);
+}
+
+/* Ask AI (searches with no results) */
+ul.results li button.row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+.ask-ai .hw {
+  color: var(--accent);
+}
+ul.results .why {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+.ai-busy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.ai-key-form {
+  display: flex;
+  gap: 8px;
+}
+.ai-key {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--tag-bg);
+  color: var(--fg);
+}
+.ai-key:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.ai-key-form .btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bar);
+  color: #fbfaf7;
+  cursor: pointer;
+}
+.ai-key-hint {
+  margin: 12px 0 10px;
+}
+.ai-credit {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 10px 0;
 }
 
 /* badges */

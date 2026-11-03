@@ -188,11 +188,8 @@ async function search(q) {
     if (isLatin) {
       const rows = await Dict.english(query);
       if (token !== searchToken) return;
-      showList(
-        rows.length
-          ? el("ul", { class: "results" }, rows.map((r) => resultItem(r.key, r.disp, r.en)))
-          : el("p", { class: "hint" }, "No results.")
-      );
+      if (rows.length) showList(el("ul", { class: "results" }, rows.map((r) => resultItem(r.key, r.disp, r.en))));
+      else showList(el("p", { class: "hint" }, "No results."), aiBlock(query));
       return;
     }
 
@@ -224,12 +221,179 @@ async function search(q) {
       parts.push(el("ul", { class: "results" }, [...exact, ...rest].map((r) => resultItem(r[0], r[1], r[2], r[3]))));
     }
     if (!parts.length) {
-      parts.push(el("p", { class: "hint" }, "No results."));
+      parts.push(el("p", { class: "hint" }, "No results."), aiBlock(query));
     }
     showList(...parts);
   } catch (err) {
     if (token === searchToken) showList(el("p", { class: "error" }, "Failed to load: " + err.message));
   }
+}
+
+// ------------------------------------------------------------------ Ask AI
+// A search with no results ends with an "Ask AI" row: Gemini guesses the word that was
+// meant (ai.js). The first tap signs in with Google and, if the account has no Gemini
+// key yet, asks for one; the key is saved to the account and reused after that.
+
+let aiModule = null;
+/** ai.js and the Firebase SDK, loaded once. Started when the row is shown, so a tap can
+    open the sign-in popup straight away (browsers block popups that open too late). */
+function loadAI() {
+  aiModule ||= import("./ai.js").catch((err) => {
+    aiModule = null;
+    throw err;
+  });
+  return aiModule;
+}
+
+function aiBlock(query) {
+  const box = el("div", { class: "ai" });
+  showAskRow(box, query);
+  // An earlier answer for the same text (e.g. after going back from a suggestion).
+  loadAI()
+    .then((ai) => {
+      const hit = ai.cached(query);
+      if (hit && box.isConnected) showSuggestions(box, query, hit);
+    })
+    .catch(() => {});
+  return box;
+}
+
+function showAskRow(box, query) {
+  box.replaceChildren(
+    el(
+      "ul",
+      { class: "results" },
+      el(
+        "li",
+        null,
+        el(
+          "button",
+          { type: "button", class: "row ask-ai", onclick: () => askAI(box, query) },
+          el("span", { class: "hw" }, "✦ Ask AI"),
+          el("span", { class: "gloss" }, "Find the word you meant (typos, misremembered spelling)")
+        )
+      )
+    )
+  );
+}
+
+function aiBusy(box, text) {
+  box.replaceChildren(el("p", { class: "hint ai-busy" }, el("span", { class: "spinner" }), text));
+}
+
+async function askAI(box, query) {
+  let user = null;
+  try {
+    const ai = await loadAI();
+    user = await ai.currentUser();
+    if (!user) {
+      aiBusy(box, "Signing in…");
+      user = await ai.signIn();
+    }
+    aiBusy(box, "Asking Gemini…");
+    const key = await ai.getKey(user);
+    if (!key) return keyForm(box, query, user);
+    showSuggestions(box, query, await ai.suggest(query, key));
+  } catch (err) {
+    if (!box.isConnected) return;
+    const code = err.code || "";
+    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return showAskRow(box, query);
+    if (err.name === "BadKeyError") return keyForm(box, query, user, "Gemini didn't accept the key: " + err.message);
+    const message =
+      code === "permission-denied"
+        ? "AI lookups only work with the site owner's Google account."
+        : code === "auth/popup-blocked"
+          ? "The sign-in popup was blocked. Allow popups for this site and try again."
+          : "AI lookup failed: " + err.message;
+    box.replaceChildren(
+      el("p", { class: "error" }, message, " ", el("button", { class: "link", type: "button", onclick: () => askAI(box, query) }, "Try again"))
+    );
+  }
+}
+
+/** Asks for a Gemini API key, saves it to the account, then asks Gemini. */
+function keyForm(box, query, user, problem) {
+  const field = el("input", {
+    type: "text",
+    class: "ai-key",
+    placeholder: "Gemini API key",
+    autocomplete: "off",
+    autocapitalize: "off",
+    spellcheck: "false",
+    "aria-label": "Gemini API key",
+  });
+  const form = el(
+    "form",
+    {
+      class: "ai-key-form",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const key = field.value.trim();
+        if (!key) return field.focus();
+        aiBusy(box, "Saving the key…");
+        try {
+          await (await loadAI()).saveKey(user, key);
+        } catch (err) {
+          return keyForm(box, query, user, "Couldn't save the key: " + err.message);
+        }
+        askAI(box, query);
+      },
+    },
+    field,
+    el("button", { type: "submit", class: "btn" }, "Save")
+  );
+  box.replaceChildren(
+    ...[
+      problem ? el("p", { class: "error" }, problem) : null,
+      el(
+        "p",
+        { class: "hint ai-key-hint" },
+        "Paste a Gemini API key (free from ",
+        el("a", { href: "https://aistudio.google.com/apikey", target: "_blank", rel: "noopener" }, "Google AI Studio"),
+        "). It's saved to your Google account, so you only need to do this once."
+      ),
+      form,
+    ].filter(Boolean)
+  );
+  field.focus();
+}
+
+async function showSuggestions(box, query, { suggestions, model }) {
+  // Link each guess to its dictionary page when the dictionary has it.
+  const found = await Promise.all(
+    suggestions.map(async (s) => {
+      const key = Dict.toKey(s.word);
+      try {
+        const row = await Dict.row(key);
+        if (row) return row;
+        const [base] = /^[\uac00-\ud7a3]{2,}$/.test(key) ? await Dict.baseForms(key) : [];
+        return base ? base.row : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  if (!box.isConnected) return;
+  const items = suggestions.map((s, i) => {
+    const r = found[i];
+    const why = s.note ? el("span", { class: "why" }, s.note) : null;
+    if (!r) {
+      return el(
+        "li",
+        null,
+        el("div", { class: "row missing" }, el("span", { class: "hw" }, s.word), why, el("span", { class: "gloss" }, s.meaning + " · not in this dictionary"))
+      );
+    }
+    const item = resultItem(r[0], r[1], r[2] || s.meaning, r[3]);
+    const link = item.querySelector("a");
+    if (why) link.insertBefore(why, link.querySelector(".gloss"));
+    return item;
+  });
+  box.replaceChildren(
+    el("h2", null, "AI suggestions"),
+    items.length ? el("ul", { class: "results ai-results" }, items) : el("p", { class: "hint" }, "Gemini had no suggestions."),
+    el("p", { class: "ai-credit" }, "Guesses by Gemini (" + model + "); they can be wrong.")
+  );
 }
 
 // ------------------------------------------------------------------ entry page

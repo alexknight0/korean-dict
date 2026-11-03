@@ -3,7 +3,7 @@
 // new URLs and old entries are dropped on activate).
 const SHELL = "shell-v1";
 const DATA = "data";
-const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "data.js", "deinflect.js", "version.js", "manifest.webmanifest", "icons/icon.svg"];
+const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "data.js", "deinflect.js", "ai.js", "version.js", "manifest.webmanifest", "icons/icon.svg"];
 // The update light shared by Alex's sites: a pinned release, so its content never changes.
 const LIB_PREFIX = "https://cdn.jsdelivr.net/gh/alexknight0/pages-common@";
 
