@@ -132,6 +132,9 @@ def main():
         page.click("#settings .btn")
         box = page.locator("header").bounding_box()
         assert abs(box["y"] + box["height"] - 844) < 2, box  # now at the bottom
+        # turning it on over results keeps the bar's room at the top (no jump)
+        yon = page.locator("#results ul.results li").first.bounding_box()["y"]
+        assert abs(yon - y0) < 1, (y0, yon, page.evaluate("document.body.className"))
         page.focus("#q")
         page.wait_for_timeout(100)
         assert page.locator("header").bounding_box()["y"] < 5  # top while typing
@@ -145,6 +148,32 @@ def main():
         page.focus("#q")
         page.wait_for_timeout(100)
         assert abs(page.locator("#results ul.results li").first.bounding_box()["y"] - y1) < 1  # nor when it comes back up
+        # Enter while the keyboard is open: the bar waits at the top until the keyboard has
+        # closed (viewport back to full height), then moves in one step.
+        page.set_viewport_size({"width": 390, "height": 500})  # keyboard opens
+        page.wait_for_timeout(100)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(100)
+        assert page.locator("header").bounding_box()["y"] < 5, "moved before the keyboard closed"
+        page.set_viewport_size({"width": 390, "height": 700})  # closing animation, part way
+        page.wait_for_timeout(50)
+        assert page.locator("header").bounding_box()["y"] < 5, "moved mid-animation"
+        page.set_viewport_size({"width": 390, "height": 844})  # closed
+        page.wait_for_timeout(50)
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 844) < 2, box
+        assert abs(page.locator("#results ul.results li").first.bounding_box()["y"] - y1) < 1
+        # if the viewport never grows back (no resize event), it still moves after a while
+        page.focus("#q")
+        page.set_viewport_size({"width": 390, "height": 500})
+        page.wait_for_timeout(100)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(1000)
+        box = page.locator("header").bounding_box()
+        assert abs(box["y"] + box["height"] - 500) < 2, box
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.focus("#q")
+        page.wait_for_timeout(100)
         page.keyboard.press("Enter")
         page.click("#results ul.results li a >> nth=0")
         page.wait_for_selector("#entry h1")

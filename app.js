@@ -1161,38 +1161,67 @@ $("#home").addEventListener("click", () => {
 // i.e. while typing. When it drops back down over a results list, body.keep-gap keeps
 // the room it took at the top, so the list doesn't jump up (Alex found the jump
 // jarring); the gap goes when the page changes or the box is focused again.
-function updateBar() {
+function moveBar() {
+  clearTimeout(barTimer);
+  barTimer = null;
   const body = document.body;
   const searching = document.activeElement === input;
-  if (body.classList.contains("searching") && !searching && settings.bottomBar && !resultsEl.hidden) {
-    body.style.setProperty("--bar-h", $("header").offsetHeight + "px");
-    body.classList.add("keep-gap");
-  }
+  if (body.classList.contains("searching") && !searching) keepGap();
   if (searching) body.classList.remove("keep-gap");
   body.classList.toggle("searching", searching);
+}
+
+/** Bottom bar over a results list: keep the room the top bar takes (see updateBar). */
+function keepGap() {
+  if (!settings.bottomBar || resultsEl.hidden) return;
+  document.body.style.setProperty("--bar-h", $("header").offsetHeight + "px");
+  document.body.classList.add("keep-gap");
+}
+
+// The on-screen keyboard, seen through the visual viewport: it shrinks when the
+// keyboard opens and grows back when it closes.
+const vv = window.visualViewport;
+const KEYBOARD_MIN = 150; // px; smaller changes are browser toolbars, not a keyboard
+let fullHeight = vv ? vv.height : 0; // viewport height without a keyboard
+let keyboardOpen = false;
+let barTimer = null; // a drop to the bottom waiting for the keyboard to close
+const BAR_WAIT_MS = 800; // longest wait for the keyboard's closing animation
+
+/** Typing ended: drop the bar to the bottom, but only once the keyboard has finished
+    closing. While it animates, the bottom of the layout viewport rises in steps, and a
+    fixed-bottom bar rode those steps down (Alex: it "glitches down"). Staying at the top
+    until then makes it one instant move. */
+function updateBar() {
+  const dropping = settings.bottomBar && document.activeElement !== input && document.body.classList.contains("searching");
+  if (dropping && vv && vv.height < fullHeight - 8) {
+    clearTimeout(barTimer);
+    barTimer = setTimeout(moveBar, BAR_WAIT_MS);
+    return;
+  }
+  moveBar();
 }
 input.addEventListener("focus", updateBar);
 input.addEventListener("blur", () => setTimeout(updateBar, 0));
 
-// Dismissing the on-screen keyboard (Android back/down button, iOS swipe) leaves
-// the box focused, so watch the visual viewport: it shrinks when the keyboard
-// opens and grows back when it closes. When it grows back, blur the box so the
-// bar returns to the bottom (only with the bottom bar; at the top nothing moves).
-if (window.visualViewport) {
-  const vv = window.visualViewport;
-  const KEYBOARD_MIN = 150; // px; smaller changes are browser toolbars, not a keyboard
-  let fullHeight = vv.height; // viewport height without a keyboard
-  let keyboardOpen = false;
+// Dismissing the keyboard (Android back/down button, iOS swipe) leaves the box focused,
+// so when the viewport grows back, blur the box so the bar returns to the bottom (only
+// with the bottom bar; at the top nothing moves).
+if (vv) {
   vv.addEventListener("resize", () => {
-    if (document.activeElement !== input || !settings.bottomBar) {
+    if (barTimer) {
+      if (vv.height >= fullHeight - 8) moveBar(); // keyboard gone: move now
+      return;
+    }
+    if (document.activeElement !== input) {
       fullHeight = vv.height; // rotation etc.
       keyboardOpen = false;
       return;
     }
+    if (vv.height > fullHeight) fullHeight = vv.height;
     if (vv.height < fullHeight - KEYBOARD_MIN) keyboardOpen = true;
     else if (keyboardOpen && vv.height > fullHeight - KEYBOARD_MIN / 2) {
       keyboardOpen = false;
-      input.blur();
+      if (settings.bottomBar) input.blur();
     }
   });
   input.addEventListener("focus", () => {
@@ -1230,6 +1259,9 @@ applyBottomBar();
 bottomBarBox.addEventListener("change", () => {
   saveSetting("bottomBar", bottomBarBox.checked);
   document.body.classList.remove("keep-gap");
+  // Turning it on over a results list moves the bar down now: keep its room at the top
+  // too, as when typing ends (measured while the bar is still at the top).
+  if (settings.bottomBar && document.activeElement !== input) keepGap();
   applyBottomBar();
 });
 

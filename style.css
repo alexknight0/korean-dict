@@ -76,12 +76,12 @@ header {
     padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
   body.bottom-bar main {
-    padding-top: max(6px, env(safe-area-inset-top));
+    padding-top: max(8px, env(safe-area-inset-top)); /* 8px = main's usual top padding */
   }
   /* When the bar drops to the bottom over a results list, keep the room it used at the
-     top (body.keep-gap, --bar-h set by updateBar) so the list doesn't jump up. */
+     top (body.keep-gap, --bar-h set by keepGap() in app.js) so the list doesn't jump up. */
   body.bottom-bar.keep-gap:not(.searching) main {
-    padding-top: calc(var(--bar-h, 0px) + max(6px, env(safe-area-inset-top)));
+    padding-top: calc(var(--bar-h, 0px) + max(8px, env(safe-area-inset-top)));
   }
 }
 
